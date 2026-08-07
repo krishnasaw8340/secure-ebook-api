@@ -1,130 +1,104 @@
-Secure Ebook Reader platform: 
-Setup packages:
+# 📚 Kuroyomi Secure Ebook API
 
-Backend
+A secure, robust backend API for a manga & ebook reading platform built with **NestJS**, **TypeORM**, and **PostgreSQL**.
 
-✔ NestJS
+---
 
-✔ TypeORM
+## 🚀 Getting Started
 
-✔ PostgreSQL
+Quick commands to get the application up and running.
 
-✔ @nestjs/config
+### 1. Installation
+```bash
+pnpm install
+```
 
-✔ class-validator
+### 2. Running the App
 
-✔ class-transformer
+The project supports environment-specific configurations loaded via `cross-env`:
 
-✔ bcrypt
+| Environment | Start Command | Loaded Configuration |
+| :--- | :--- | :--- |
+| **Development** | `pnpm start:dev` | `.env.development` |
+| **Staging** | `pnpm start:staging` | `.env.staging` |
+| **Production** | `pnpm start:prod` | `.env.production` |
 
-✔ JWT
+---
 
-✔ Passport
+## 🗄️ Database Management (Migrations & Seeds)
 
-✔ Nodemailer
+We use a standalone TypeORM DataSource configuration ([data-source.ts](file:///c:/2026%20Projects/kuroyomi-api/ebook-api/src/database/data-source.ts)) to handle migrations and custom seeds.
 
-✔ Swagger
+### 📊 Migrations
 
+To keep the database schema in sync with TypeORM entities:
 
-FLOW AFTER CREATING DB ENTITIES
+*   **Generate a Migration:**
+    ```bash
+    pnpm migration:generate src/database/migrations/<MigrationName>
+    ```
+*   **Run Pending Migrations:**
+    ```bash
+    pnpm migration:run
+    ```
+*   **Revert Last Migration:**
+    ```bash
+    pnpm migration:revert
+    ```
 
+> [!WARNING]
+> If you are using a custom PostgreSQL schema (such as `"auth"`), TypeORM will **not** automatically create it. Always add `await queryRunner.query('CREATE SCHEMA IF NOT EXISTS "auth"');` at the beginning of the generated `up` method.
 
-Database
-   ✅
+### 🌱 Seeding (Idempotent)
 
-↓
+Seeds populate the database with default data without creating duplicates.
 
-Migration
-   ⬜
+*   **Seed All Database Data:**
+    ```bash
+    pnpm seed
+    ```
+*   **Seed Roles Only (ADMIN/USER):**
+    ```bash
+    pnpm seed:roles
+    ```
 
-↓
+---
 
-Seed
-   ⬜
+## 🛠️ Feature Checklist & Roadmap
 
-↓
+Progress tracker for building the platform features.
 
-Repository Layer
-   ⬜
+### 🏗️ Infrastructure & Core Setup
+- [x] NestJS Application Initialization
+- [x] PostgreSQL Integration with TypeORM
+- [x] Environment Configuration (`.env.*` loader)
+- [x] Schema Validation via `Joi`
+- [x] Database Module & Logging Setup
+- [x] Authentication Entities (`User`, `Role`, `UserRole`, `RefreshToken`, `OtpVerification`)
+- [x] Database Migrations setup
+- [x] Seeding Infrastructure with Idempotent Role Seeder
 
-↓
+### 🔐 Authentication System
+- [ ] JWT Module & Strategy Configuration
+- [ ] Password Hashing Service (`bcrypt`)
+- [ ] Token Service (Access & Refresh tokens lifecycle)
+- [ ] Mail Service Configuration (`nodemailer`)
+- [ ] One-Time Password (OTP) verification service
+- [ ] JWT & Refresh Token validation guards
+- [ ] Authentication Service implementation
+- [ ] Registration API with Email Verification
+- [ ] Secure Login & Logout API
+- [ ] Refresh Token Rotation API
 
-DTOs
-   ⬜
+---
 
-↓
+## 📦 Built-in Tech Stack & Packages
 
-Validation
+The project has the following modules configured and ready to use:
 
-↓
-
-Service
-
-↓
-
-JWT
-
-↓
-
-Controller
-
-↓
-
-Testing
-
-
-
-
-
-
-
-
-Packages You Already Have
-Core
-
-✅
-
-@nestjs/common
-@nestjs/core
-@nestjs/platform-express
-Configuration
-
-✅
-
-@nestjs/config
-joi
-Database
-
-✅
-
-@nestjs/typeorm
-typeorm
-pg
-Authentication
-
-✅
-
-@nestjs/jwt
-@nestjs/passport
-passport
-passport-jwt
-bcrypt
-Validation
-
-✅
-
-class-validator
-class-transformer
-API Documentation
-
-✅
-
-@nestjs/swagger
-swagger-ui-express
-Email
-
-✅
-
-nodemailer
-
-Perfect for OTP verification.
+*   **Core:** `@nestjs/common`, `@nestjs/core`, `@nestjs/platform-express`
+*   **Configuration & Validation:** `@nestjs/config`, `joi`, `class-validator`, `class-transformer`
+*   **Database & ORM:** `@nestjs/typeorm`, `typeorm`, `pg` (PostgreSQL)
+*   **Auth & Security:** `@nestjs/jwt`, `@nestjs/passport`, `@nestjs/throttler`, `passport`, `passport-jwt`, `passport-local`, `bcrypt`, `helmet`, `cookie-parser`
+*   **Emailing:** `nodemailer`
+*   **API Documentation:** `@nestjs/swagger`, `swagger-ui-express`
