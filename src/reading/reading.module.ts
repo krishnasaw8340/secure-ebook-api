@@ -4,6 +4,6 @@ import { ReadingController } from './reading.controller';
 
 @Module({
   providers: [ReadingService],
-  controllers: [ReadingController]
+  controllers: [ReadingController],
 })
 export class ReadingModule {}
