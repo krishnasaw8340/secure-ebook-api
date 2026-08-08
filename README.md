@@ -79,9 +79,9 @@ Progress tracker for building the platform features.
 - [x] Seeding Infrastructure with Idempotent Role Seeder
 
 ### 🔐 Authentication System
-- [ ] JWT Module & Strategy Configuration
-- [ ] Password Hashing Service (`bcrypt`)
-- [ ] Token Service (Access & Refresh tokens lifecycle)
+- [x] JWT Module & Strategy Configuration
+- [x] Password Hashing Service (`bcrypt`)
+- [x] Token Service (Access & Refresh tokens lifecycle)
 - [ ] Mail Service Configuration (`nodemailer`)
 - [ ] One-Time Password (OTP) verification service
 - [ ] JWT & Refresh Token validation guards
