@@ -8,20 +8,24 @@ export class RoleSeeder implements Seeder {
         const roleRepository = dataSource.getRepository(Role);
 
         const rolesToSeed = [
-            { 
-                name: RoleType.ADMIN, 
-                description: 'Administrator with management access' 
+            {
+                name: RoleType.ADMIN,
+                description: 'Administrator with management access'
             },
-            { 
-                name: RoleType.USER, 
-                description: 'Standard registered user' 
+            {
+                name: RoleType.USER,
+                description: 'Standard registered user'
+            },
+            {
+                name: RoleType.SUPER_ADMIN,
+                description: 'Super Admin'
             },
         ];
 
         for (const roleData of rolesToSeed) {
             // Check if the role already exists
-            const existingRole = await roleRepository.findOne({ 
-                where: { name: roleData.name } 
+            const existingRole = await roleRepository.findOne({
+                where: { name: roleData.name }
             });
 
             if (!existingRole) {
