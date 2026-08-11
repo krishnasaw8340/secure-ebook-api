@@ -49,6 +49,19 @@ export class RefreshTokenService {
         return this.create(userId, token, expiresAt, deviceName, ipAddress, userAgent);
     }
 
+    async findValidToken(userId: string, token: string): Promise<RefreshToken | null> {
+        const tokenHash = this.hashToken(token);
+        const record = await this.refreshTokenRepository.findOne({
+            where: { userId, tokenHash },
+        });
+
+        if (!record || record.revokedAt || new Date() > record.expiresAt) {
+            return null;
+        }
+
+        return record;
+    }
+
     async validateToken(userId: string, token: string): Promise<RefreshToken> {
         const tokenHash = this.hashToken(token);
         const record = await this.refreshTokenRepository.findOne({
@@ -72,6 +85,13 @@ export class RefreshTokenService {
         await this.refreshTokenRepository.save(record);
 
         return record;
+    }
+
+    async revokeById(tokenId: string): Promise<void> {
+        await this.refreshTokenRepository.update(
+            { id: tokenId },
+            { revokedAt: new Date() },
+        );
     }
 
     async revoke(userId: string, token: string): Promise<void> {

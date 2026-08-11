@@ -42,16 +42,23 @@ export class AuthService {
         // Step 4: Assign Default Role
         await this.usersService.assignRole(user.id, dto.roleType);
 
-        // Step 5: Build JWT Payload
-        const payload: JwtPayload = {
+        // Step 5: Build JWT Payloads
+        const accessPayload: JwtPayload = {
             sub: user.id,
             email: user.email,
             roles: [dto.roleType],
+            type: 'access',
+        };
+        const refreshPayload: JwtPayload = {
+            sub: user.id,
+            email: user.email,
+            roles: [dto.roleType],
+            type: 'refresh',
         };
 
         // Step 6: Generate Tokens
-        const accessToken = await this.tokenService.generateAccessToken(payload);
-        const refreshToken = await this.tokenService.generateRefreshToken(payload);
+        const accessToken = await this.tokenService.generateAccessToken(accessPayload);
+        const refreshToken = await this.tokenService.generateRefreshToken(refreshPayload);
 
         // Step 7: Save Refresh Token (Hashed)
         await this.refreshTokenService.save(user.id, refreshToken);
@@ -67,7 +74,7 @@ export class AuthService {
         };
     }
 
-    async login(dto: LoginDto): Promise<any> {
+    async login(dto: LoginDto): Promise<AuthResponseDto> {
         // Step 1: Find user by email
         const user = await this.usersService.findByEmail(dto.email, true, true);
         if (!user) {
@@ -80,16 +87,24 @@ export class AuthService {
             throw new UnauthorizedException('Invalid password');
         }
 
-        // Step 3: Build JWT Payload
-        const payload: JwtPayload = {
+        // Step 3: Build JWT Payloads
+        const roles = user.userRoles?.map((r) => r.role?.name).filter(Boolean) as RoleType[] || [];
+        const accessPayload: JwtPayload = {
             sub: user.id,
             email: user.email,
-            roles: user.userRoles?.map((r) => r.role?.name).filter(Boolean) as RoleType[] || [],
+            roles,
+            type: 'access',
+        };
+        const refreshPayload: JwtPayload = {
+            sub: user.id,
+            email: user.email,
+            roles,
+            type: 'refresh',
         };
 
         // Step 4: Generate Tokens
-        const accessToken = await this.tokenService.generateAccessToken(payload);
-        const refreshToken = await this.tokenService.generateRefreshToken(payload);
+        const accessToken = await this.tokenService.generateAccessToken(accessPayload);
+        const refreshToken = await this.tokenService.generateRefreshToken(refreshPayload);
 
         // Step 5: Save Refresh Token (Hashed)
         await this.refreshTokenService.save(user.id, refreshToken);
@@ -99,9 +114,65 @@ export class AuthService {
         const { password, ...userWithoutPassword } = user;
 
         return {
-            // user: userWithoutPassword,
+            user: userWithoutPassword,
             accessToken,
             refreshToken,
+        };
+    }
+
+    async refresh(refreshToken: string): Promise<{ accessToken: string; refreshToken: string }> {
+        // 1. Verify JWT
+        let payload: JwtPayload;
+        try {
+            payload = await this.tokenService.verifyRefreshToken(refreshToken);
+        } catch {
+            throw new UnauthorizedException('Invalid refresh token');
+        }
+
+        // 2. Make sure this is actually a refresh token
+        if (payload.type !== 'refresh') {
+            throw new UnauthorizedException('Invalid refresh token');
+        }
+
+        // 3. Validate stored refresh token
+        const storedToken = await this.refreshTokenService.findValidToken(
+            payload.sub,
+            refreshToken,
+        );
+
+        if (!storedToken) {
+            throw new UnauthorizedException('Invalid refresh token');
+        }
+
+        // 4. Revoke old refresh token (Consumption / Rotation)
+        await this.refreshTokenService.revokeById(storedToken.id);
+
+        // 5. Build payloads for new tokens
+        const accessPayload: JwtPayload = {
+            sub: payload.sub,
+            email: payload.email,
+            roles: payload.roles,
+            type: 'access',
+        };
+
+        const refreshPayload: JwtPayload = {
+            sub: payload.sub,
+            email: payload.email,
+            roles: payload.roles,
+            type: 'refresh',
+        };
+
+        // 6. Generate new access token and new refresh token
+        const accessToken = await this.tokenService.generateAccessToken(accessPayload);
+        const newRefreshToken = await this.tokenService.generateRefreshToken(refreshPayload);
+
+        // 7. Store new refresh token (hashed)
+        await this.refreshTokenService.save(payload.sub, newRefreshToken);
+
+        // 8. Return both new access token and rotated refresh token
+        return {
+            accessToken,
+            refreshToken: newRefreshToken,
         };
     }
 }
