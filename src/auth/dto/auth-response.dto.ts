@@ -39,3 +39,11 @@ export class AuthResponseDto {
     @ApiProperty()
     refreshToken: string;
 }
+
+export class LoginDto {
+    @ApiProperty()
+    email: string;
+    @ApiProperty()
+    password: string;
+}
+
