@@ -15,7 +15,7 @@ export class UsersService {
         private readonly roleRepository: Repository<Role>,
         @InjectRepository(UserRole)
         private readonly userRoleRepository: Repository<UserRole>,
-    ) {}
+    ) { }
 
     async createUser(userData: Partial<User>): Promise<User> {
         const user = this.userRepository.create(userData);
@@ -26,25 +26,26 @@ export class UsersService {
         return this.userRepository.findOne({ where: { id } });
     }
 
-    async findByEmail(email: string, includePassword = false): Promise<User | null> {
+    async findByEmail(
+        email: string,
+        includePassword = false,
+        includeRoles = false,
+    ): Promise<User | null> {
+        const queryBuilder = this.userRepository
+            .createQueryBuilder('user')
+            .where('user.email = :email', { email });
+
         if (includePassword) {
-            return this.userRepository.findOne({
-                where: { email },
-                select: {
-                    id: true,
-                    email: true,
-                    username: true,
-                    password: true,
-                    fullName: true,
-                    avatarUrl: true,
-                    isEmailVerified: true,
-                    status: true,
-                    createdAt: true,
-                    updatedAt: true,
-                },
-            });
+            queryBuilder.addSelect('user.password');
         }
-        return this.userRepository.findOne({ where: { email } });
+
+        if (includeRoles) {
+            queryBuilder
+                .leftJoinAndSelect('user.userRoles', 'userRoles')
+                .leftJoinAndSelect('userRoles.role', 'role');
+        }
+
+        return queryBuilder.getOne();
     }
 
     async findByUsername(username: string): Promise<User | null> {
@@ -87,4 +88,5 @@ export class UsersService {
             throw new NotFoundException(`User with ID ${userId} not found`);
         }
     }
+
 }

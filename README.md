@@ -79,16 +79,27 @@ Progress tracker for building the platform features.
 - [x] Seeding Infrastructure with Idempotent Role Seeder
 
 ### 🔐 Authentication System
-- [x] JWT Module & Strategy Configuration
-- [x] Password Hashing Service (`bcrypt`)
-- [x] Token Service (Access & Refresh tokens lifecycle)
-- [ ] Mail Service Configuration (`nodemailer`)
-- [ ] One-Time Password (OTP) verification service
-- [ ] JWT & Refresh Token validation guards
-- [ ] Authentication Service implementation
-- [ ] Registration API with Email Verification
-- [ ] Secure Login & Logout API
-- [ ] Refresh Token Rotation API
+
+#### Database & Infrastructure
+- [x] Auth Entities (`User`, `Role`, `UserRole`, `RefreshToken`, `OtpVerification`)
+- [x] Migrations & Schema Setup
+- [x] Idempotent Seeders (`seed:roles`, `seed`)
+- [x] Config Module & Setup
+- [x] `PasswordService` (bcrypt hashing)
+- [x] `TokenService` (Access & Refresh tokens lifecycle)
+- [x] `UsersService` (User operations & role assignments)
+- [x] `RefreshTokenService` (Hashed token persistence)
+
+#### Features & API Progress
+- [x] User Registration (`POST /auth/register`)
+- [x] User Login (`POST /auth/login`)
+- [x] JWT Strategy (`passport-jwt`)
+- [x] JWT Auth Guard (`JwtAuthGuard`)
+- [x] Authenticated User Profile (`GET /auth/me`)
+- [ ] Refresh Token API (`POST /auth/refresh`)
+- [ ] User Logout (`POST /auth/logout`)
+- [ ] Email OTP Verification
+- [ ] Roles Guard & Authorization (`@Roles()`)
 
 ---
 
