@@ -90,6 +90,7 @@ Progress tracker for building the platform features.
 - [x] `UsersService` (User operations & role assignments)
 - [x] `RefreshTokenService` (Hashed token persistence & session revocation)
 - [x] `OtpService` (Cryptographically secure OTP generation, bcrypt hashing & attempt limiting)
+- [x] `MailService` (Nodemailer email delivery for OTP verification & password resets)
 
 #### Features & API Progress
 - [x] User Registration (`POST /api/auth/register`)
@@ -104,6 +105,8 @@ Progress tracker for building the platform features.
 - [x] Logout All Devices (`POST /api/auth/logout-all`)
 - [x] Global JWT Auth Guard (`APP_GUARD`) & `@Public()` Bypass Decorator
 - [x] `@CurrentUser()` Parameter Decorator & `JwtUser` Interface
+- [x] Forgot Password (`POST /api/auth/forgot-password`)
+- [x] Reset Password (`POST /api/auth/reset-password`)
 - [x] Roles Guard & Authorization (`@Roles()`, `RolesGuard`)
 
 ---

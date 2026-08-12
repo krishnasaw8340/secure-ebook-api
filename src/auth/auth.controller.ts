@@ -5,6 +5,8 @@ import { LoginDto, RegisterDto } from './dto/register.dto';
 import { AuthResponseDto } from './dto/auth-response.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 import { Public } from './decorators/public.decorator';
 import { CurrentUser } from './decorators/current-user.decorator';
 import type { JwtUser } from './interfaces/jwt-user.interface';
@@ -35,6 +37,25 @@ export class AuthController {
     @ApiResponse({ status: 400, description: 'Invalid, expired, or max-attempted OTP code.' })
     async verifyEmail(@Body() dto: VerifyEmailDto) {
         return this.authService.verifyEmail(dto.email, dto.otp);
+    }
+
+    @Post('forgot-password')
+    @Public()
+    @HttpCode(HttpStatus.OK)
+    @ApiOperation({ summary: 'Request password reset OTP code via email' })
+    @ApiResponse({ status: 200, description: 'If email exists, password reset OTP is sent.' })
+    async forgotPassword(@Body() dto: ForgotPasswordDto) {
+        return this.authService.forgotPassword(dto.email);
+    }
+
+    @Post('reset-password')
+    @Public()
+    @HttpCode(HttpStatus.OK)
+    @ApiOperation({ summary: 'Reset password using email, OTP code, and new password' })
+    @ApiResponse({ status: 200, description: 'Password reset successfully.' })
+    @ApiResponse({ status: 400, description: 'Invalid or expired OTP code / request.' })
+    async resetPassword(@Body() dto: ResetPasswordDto) {
+        return this.authService.resetPassword(dto);
     }
 
     @Post('login')

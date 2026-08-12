@@ -4,6 +4,7 @@ import { PasswordService } from './services/password.service';
 import { TokenService } from './services/token.service';
 import { RefreshTokenService } from './services/refresh-token.service';
 import { OtpService } from './services/otp.service';
+import { MailService } from '../common/mail/mail.service';
 import { LoginDto, RegisterDto } from './dto/register.dto';
 import { AuthResponseDto } from './dto/auth-response.dto';
 import { RoleType } from '../common/enums/role.enum';
@@ -18,10 +19,11 @@ export class AuthService {
         private readonly tokenService: TokenService,
         private readonly refreshTokenService: RefreshTokenService,
         private readonly otpService: OtpService,
+        private readonly mailService: MailService,
     ) { }
 
     async register(dto: RegisterDto): Promise<{ message: string; email: string }> {
-        // Step 1: Check Email
+        // Step 1: Check Email & Username
         const existingUser = await this.usersService.findByEmail(dto.email);
         if (existingUser) {
             throw new ConflictException('Email already exists');
@@ -45,14 +47,17 @@ export class AuthService {
         // Step 4: Assign Default Role
         await this.usersService.assignRole(user.id, dto.roleType);
 
-        // Step 5: Generate & Store OTP
-        await this.otpService.generateAndSaveOtp(
+        // Step 5: Generate & Store Hashed OTP
+        const otp = await this.otpService.generateAndSaveOtp(
             user.id,
             user.email,
             OtpPurpose.REGISTER,
         );
 
-        // Step 6: Return Response requiring verification
+        // Step 6: Send Verification OTP via Email
+        await this.mailService.sendVerificationOtp(user.email, otp);
+
+        // Step 7: Return Response requiring email verification
         return {
             message: 'Registration successful. Please verify your email using the OTP sent to your email.',
             email: user.email,
@@ -196,5 +201,57 @@ export class AuthService {
 
     async logoutAll(userId: string): Promise<void> {
         await this.refreshTokenService.revokeAllForUser(userId);
+    }
+
+    async forgotPassword(email: string): Promise<{ message: string }> {
+        const user = await this.usersService.findByEmail(email);
+
+        // Prevent account enumeration by returning identical generic message
+        if (!user) {
+            return {
+                message: 'If the email exists, a password reset code has been sent.',
+            };
+        }
+
+        const otp = await this.otpService.generateAndSaveOtp(
+            user.id,
+            user.email,
+            OtpPurpose.FORGOT_PASSWORD,
+        );
+
+        await this.mailService.sendPasswordResetOtp(user.email, otp);
+
+        return {
+            message: 'If the email exists, a password reset code has been sent.',
+        };
+    }
+
+    async resetPassword(dto: { email: string; otp: string; newPassword: string }): Promise<{ message: string }> {
+        const user = await this.usersService.findByEmail(dto.email);
+
+        if (!user) {
+            throw new BadRequestException('Invalid password reset request');
+        }
+
+        // Verify OTP for FORGOT_PASSWORD purpose
+        await this.otpService.verify(
+            user.id,
+            user.email,
+            dto.otp,
+            OtpPurpose.FORGOT_PASSWORD,
+        );
+
+        // Hash new password
+        const hashedPassword = await this.passwordService.hash(dto.newPassword);
+
+        // Update password in DB
+        await this.usersService.updatePassword(user.id, hashedPassword);
+
+        // Revoke all existing sessions/refresh tokens for security
+        await this.refreshTokenService.revokeAllForUser(user.id);
+
+        return {
+            message: 'Password reset successfully',
+        };
     }
 }

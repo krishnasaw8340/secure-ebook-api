@@ -17,6 +17,7 @@ import { JwtStrategy } from './strategies/jwt.strategy';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RolesGuard } from './guards/roles.guard';
 import { UserModule } from '../user/user.module';
+import { MailModule } from '../common/mail/mail.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { UserModule } from '../user/user.module';
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.register({}),
     UserModule,
+    MailModule,
   ],
   providers: [AuthService, PasswordService, TokenService, RefreshTokenService, OtpService, JwtStrategy, JwtAuthGuard, RolesGuard],
   controllers: [AuthController],
