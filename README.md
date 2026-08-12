@@ -90,6 +90,7 @@ Progress tracker for building the platform features.
 - [x] `UsersService` (User operations & role assignments)
 - [x] `RefreshTokenService` (Hashed token persistence & session revocation)
 - [x] `OtpService` (Cryptographically secure OTP generation, bcrypt hashing & attempt limiting)
+- [x] `MailService` (Nodemailer email delivery for OTP verification & password resets)
 
 #### Features & API Progress
 - [x] User Registration (`POST /api/auth/register`)
@@ -102,7 +103,11 @@ Progress tracker for building the platform features.
 - [x] Refresh Token Rotation (`POST /api/auth/refresh`)
 - [x] Single Device Logout (`POST /api/auth/logout`)
 - [x] Logout All Devices (`POST /api/auth/logout-all`)
-- [ ] Roles Guard & Authorization (`@Roles()`)
+- [x] Global JWT Auth Guard (`APP_GUARD`) & `@Public()` Bypass Decorator
+- [x] `@CurrentUser()` Parameter Decorator & `JwtUser` Interface
+- [x] Forgot Password (`POST /api/auth/forgot-password`)
+- [x] Reset Password (`POST /api/auth/reset-password`)
+- [x] Roles Guard & Authorization (`@Roles()`, `RolesGuard`)
 
 ---
 
@@ -189,6 +194,19 @@ sequenceDiagram
     Client->>Server: POST /api/auth/logout-all (Revoke all devices)
     Server->>DB: UPDATE refresh_tokens SET revoked_at = NOW() WHERE user_id = :id AND revoked_at IS NULL
     Server-->>Client: 204 No Content
+
+    Note over Client, DB: 6. Forgot & Reset Password Flow
+    Client->>Server: POST /api/auth/forgot-password (email)
+    Server->>DB: Check if user exists & generate OTP (purpose: FORGOT_PASSWORD)
+    Server->>DB: Save bcrypt hash of OTP in auth.otp_verifications
+    Server->>Server: Send Password Reset OTP Email (Nodemailer)
+    Server-->>Client: Return 200 OK "If the email exists, a password reset code has been sent."
+
+    Client->>Server: POST /api/auth/reset-password (email, otp, newPassword)
+    Server->>DB: Verify OTP code hash & expiry & attempts <= 5
+    Server->>DB: Update user password hash in auth.users
+    Server->>DB: REVOKE ALL active refresh tokens for user (logout all sessions)
+    Server-->>Client: Return 200 OK "Password reset successfully"
 ```
 
 ---
@@ -224,6 +242,8 @@ If an attacker attempts to use `Refresh Token A` after it has already been rotat
 | :--- | :--- |
 | **Email Verification Gate** | `isEmailVerified` must be `true` before `POST /api/auth/login` will issue tokens. Prevents unverified account access. |
 | **Hashed OTP & Attempt Limit** | OTP codes are 6-digit cryptographically secure numbers, bcrypt hashed, valid for 10 minutes, and capped at 5 attempts to prevent brute-forcing. |
+| **Account Enumeration Defense** | `POST /api/auth/forgot-password` returns identical response whether email exists or not, preventing user harvesting. |
+| **Password Reset Session Revocation** | Resetting a password automatically revokes all active refresh tokens for the user, terminating all existing sessions across all devices. |
 | **Strict Token Type Scoping** | Every payload includes `type: 'access'` or `type: 'refresh'`. This prevents cross-use of tokens. |
 | **Automatic Token Rotation** | Every refresh request revokes the old refresh token (`revokedAt = NOW()`) and issues a fresh pair. |
 | **Protected API Defense** | `JwtStrategy` rejects any token where `type !== 'access'`. |

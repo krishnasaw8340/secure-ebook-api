@@ -20,10 +20,13 @@ const validationSchema = Joi.object({
   JWT_REFRESH_EXPIRES_IN: Joi.string().required(),
 
   // Mail
-  MAIL_HOST: Joi.string().required(),
-  MAIL_PORT: Joi.number().required(),
-  MAIL_USER: Joi.string().email().required(),
-  MAIL_PASSWORD: Joi.string().required(),
+  MAIL_HOST: Joi.string().optional(),
+  MAIL_PORT: Joi.number().optional(),
+  MAIL_USER: Joi.string().optional(),
+  MAIL_USERNAME: Joi.string().optional(),
+  MAIL_PASSWORD: Joi.string().optional(),
+  MAIL_SECURE: Joi.boolean().optional(),
+  MAIL_FROM: Joi.string().optional(),
 
   // Payment (optional until implemented)
   RAZORPAY_KEY: Joi.string().optional(),

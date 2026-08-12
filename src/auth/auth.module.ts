@@ -15,7 +15,9 @@ import { RefreshTokenService } from './services/refresh-token.service';
 import { OtpService } from './services/otp.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
+import { RolesGuard } from './guards/roles.guard';
 import { UserModule } from '../user/user.module';
+import { MailModule } from '../common/mail/mail.module';
 
 @Module({
   imports: [
@@ -23,9 +25,10 @@ import { UserModule } from '../user/user.module';
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.register({}),
     UserModule,
+    MailModule,
   ],
-  providers: [AuthService, PasswordService, TokenService, RefreshTokenService, OtpService, JwtStrategy, JwtAuthGuard],
+  providers: [AuthService, PasswordService, TokenService, RefreshTokenService, OtpService, JwtStrategy, JwtAuthGuard, RolesGuard],
   controllers: [AuthController],
-  exports: [AuthService, PasswordService, TokenService, RefreshTokenService, OtpService, JwtStrategy, JwtAuthGuard, PassportModule],
+  exports: [AuthService, PasswordService, TokenService, RefreshTokenService, OtpService, JwtStrategy, JwtAuthGuard, RolesGuard, PassportModule],
 })
 export class AuthModule { }
