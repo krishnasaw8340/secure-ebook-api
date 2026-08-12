@@ -5,6 +5,8 @@ import { LoginDto, RegisterDto } from './dto/register.dto';
 import { AuthResponseDto } from './dto/auth-response.dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 
+import { RefreshTokenDto } from './dto/refresh-token.dto';
+
 @ApiTags('Authentication')
 @Controller('auth')
 export class AuthController {
@@ -35,6 +37,15 @@ export class AuthController {
     @ApiResponse({ status: 401, description: 'Invalid email or password.' })
     async login(@Body() loginDto: LoginDto): Promise<AuthResponseDto> {
         return this.authService.login(loginDto);
+    }
+
+    @Post('refresh')
+    @HttpCode(HttpStatus.OK)
+    @ApiOperation({ summary: 'Refresh access token using a valid refresh token' })
+    @ApiResponse({ status: 200, description: 'Access token refreshed successfully.' })
+    @ApiResponse({ status: 401, description: 'Invalid or expired refresh token.' })
+    async refresh(@Body() dto: RefreshTokenDto) {
+        return this.authService.refresh(dto.refreshToken);
     }
 
     @Get('me')
