@@ -12,6 +12,7 @@ import { OtpVerification } from './entities/otp-verification.entity';
 import { PasswordService } from './services/password.service';
 import { TokenService } from './services/token.service';
 import { RefreshTokenService } from './services/refresh-token.service';
+import { OtpService } from './services/otp.service';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { UserModule } from '../user/user.module';
@@ -23,8 +24,8 @@ import { UserModule } from '../user/user.module';
     JwtModule.register({}),
     UserModule,
   ],
-  providers: [AuthService, PasswordService, TokenService, RefreshTokenService, JwtStrategy, JwtAuthGuard],
+  providers: [AuthService, PasswordService, TokenService, RefreshTokenService, OtpService, JwtStrategy, JwtAuthGuard],
   controllers: [AuthController],
-  exports: [AuthService, PasswordService, TokenService, RefreshTokenService, JwtStrategy, JwtAuthGuard, PassportModule],
+  exports: [AuthService, PasswordService, TokenService, RefreshTokenService, OtpService, JwtStrategy, JwtAuthGuard, PassportModule],
 })
 export class AuthModule { }

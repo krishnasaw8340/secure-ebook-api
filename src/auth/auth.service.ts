@@ -1,12 +1,14 @@
-import { ConflictException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { UsersService } from '../user/services/users.service';
 import { PasswordService } from './services/password.service';
 import { TokenService } from './services/token.service';
 import { RefreshTokenService } from './services/refresh-token.service';
+import { OtpService } from './services/otp.service';
 import { LoginDto, RegisterDto } from './dto/register.dto';
 import { AuthResponseDto } from './dto/auth-response.dto';
 import { RoleType } from '../common/enums/role.enum';
 import { JwtPayload } from './interfaces/jwt-payload.interface';
+import { OtpPurpose } from '../common/enums/otp-purpose.enum';
 
 @Injectable()
 export class AuthService {
@@ -15,23 +17,24 @@ export class AuthService {
         private readonly passwordService: PasswordService,
         private readonly tokenService: TokenService,
         private readonly refreshTokenService: RefreshTokenService,
+        private readonly otpService: OtpService,
     ) { }
 
-    async register(dto: RegisterDto): Promise<AuthResponseDto> {
+    async register(dto: RegisterDto): Promise<{ message: string; email: string }> {
         // Step 1: Check Email
         const existingUser = await this.usersService.findByEmail(dto.email);
         if (existingUser) {
             throw new ConflictException('Email already exists');
         }
-        const existingUserName = await this.usersService.findByUsername(dto.username)
+        const existingUserName = await this.usersService.findByUsername(dto.username);
         if (existingUserName) {
-            throw new ConflictException('UserName Already Exists')
+            throw new ConflictException('UserName Already Exists');
         }
 
         // Step 2: Hash Password
         const hashedPassword = await this.passwordService.hash(dto.password);
 
-        // Step 3: Create User
+        // Step 3: Create User (isEmailVerified defaults to false)
         const user = await this.usersService.createUser({
             email: dto.email,
             username: dto.username,
@@ -42,35 +45,42 @@ export class AuthService {
         // Step 4: Assign Default Role
         await this.usersService.assignRole(user.id, dto.roleType);
 
-        // Step 5: Build JWT Payloads
-        const accessPayload: JwtPayload = {
-            sub: user.id,
+        // Step 5: Generate & Store OTP
+        await this.otpService.generateAndSaveOtp(
+            user.id,
+            user.email,
+            OtpPurpose.REGISTER,
+        );
+
+        // Step 6: Return Response requiring verification
+        return {
+            message: 'Registration successful. Please verify your email using the OTP sent to your email.',
             email: user.email,
-            roles: [dto.roleType],
-            type: 'access',
         };
-        const refreshPayload: JwtPayload = {
-            sub: user.id,
-            email: user.email,
-            roles: [dto.roleType],
-            type: 'refresh',
-        };
+    }
 
-        // Step 6: Generate Tokens
-        const accessToken = await this.tokenService.generateAccessToken(accessPayload);
-        const refreshToken = await this.tokenService.generateRefreshToken(refreshPayload);
+    async verifyEmail(email: string, otp: string): Promise<{ message: string }> {
+        const user = await this.usersService.findByEmail(email);
 
-        // Step 7: Save Refresh Token (Hashed)
-        await this.refreshTokenService.save(user.id, refreshToken);
+        if (!user) {
+            throw new BadRequestException('Invalid verification request');
+        }
 
-        // Step 8: Return Response
-        // Destructure to remove password from the returned object
-        const { password, ...userWithoutPassword } = user;
+        if (user.isEmailVerified) {
+            throw new BadRequestException('Email already verified');
+        }
+
+        await this.otpService.verify(
+            user.id,
+            email,
+            otp,
+            OtpPurpose.REGISTER,
+        );
+
+        await this.usersService.verifyEmail(user.id);
 
         return {
-            user: userWithoutPassword,
-            accessToken,
-            refreshToken,
+            message: 'Email verified successfully',
         };
     }
 
@@ -81,13 +91,18 @@ export class AuthService {
             throw new NotFoundException('User not found');
         }
 
-        // Step 2: Verify password
+        // Step 2: Check if email is verified
+        if (!user.isEmailVerified) {
+            throw new UnauthorizedException('Please verify your email before logging in');
+        }
+
+        // Step 3: Verify password
         const isPasswordValid = await this.passwordService.compare(dto.password, user.password);
         if (!isPasswordValid) {
             throw new UnauthorizedException('Invalid password');
         }
 
-        // Step 3: Build JWT Payloads
+        // Step 4: Build JWT Payloads
         const roles = user.userRoles?.map((r) => r.role?.name).filter(Boolean) as RoleType[] || [];
         const accessPayload: JwtPayload = {
             sub: user.id,
@@ -102,15 +117,14 @@ export class AuthService {
             type: 'refresh',
         };
 
-        // Step 4: Generate Tokens
+        // Step 5: Generate Tokens
         const accessToken = await this.tokenService.generateAccessToken(accessPayload);
         const refreshToken = await this.tokenService.generateRefreshToken(refreshPayload);
 
-        // Step 5: Save Refresh Token (Hashed)
+        // Step 6: Save Refresh Token (Hashed)
         await this.refreshTokenService.save(user.id, refreshToken);
 
-        // Step 6: Return Response
-        // Destructure to remove password from the returned object
+        // Step 7: Return Response
         const { password, ...userWithoutPassword } = user;
 
         return {
@@ -174,5 +188,13 @@ export class AuthService {
             accessToken,
             refreshToken: newRefreshToken,
         };
+    }
+
+    async logout(userId: string, refreshToken: string): Promise<void> {
+        await this.refreshTokenService.revoke(userId, refreshToken);
+    }
+
+    async logoutAll(userId: string): Promise<void> {
+        await this.refreshTokenService.revokeAllForUser(userId);
     }
 }

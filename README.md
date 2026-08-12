@@ -88,23 +88,28 @@ Progress tracker for building the platform features.
 - [x] `PasswordService` (bcrypt hashing)
 - [x] `TokenService` (Access & Refresh tokens lifecycle)
 - [x] `UsersService` (User operations & role assignments)
-- [x] `RefreshTokenService` (Hashed token persistence)
+- [x] `RefreshTokenService` (Hashed token persistence & session revocation)
+- [x] `OtpService` (Cryptographically secure OTP generation, bcrypt hashing & attempt limiting)
 
 #### Features & API Progress
-- [x] User Registration (`POST /auth/register`)
-- [x] User Login (`POST /auth/login`)
+- [x] User Registration (`POST /api/auth/register`)
+- [x] Email OTP Verification (`POST /api/auth/verify-email`)
+- [x] User Login (`POST /api/auth/login`)
 - [x] JWT Strategy (`passport-jwt`)
 - [x] JWT Auth Guard (`JwtAuthGuard`)
-- [x] Authenticated User Profile (`GET /auth/me`)
-- [x] Refresh Token API (`POST /auth/refresh`)
-- [x] Refresh Token Rotation (`POST /auth/refresh`)
-- [ ] User Logout (`POST /auth/logout`)
-- [ ] Email OTP Verification
+- [x] Authenticated User Profile (`GET /api/auth/me`)
+- [x] Refresh Token API (`POST /api/auth/refresh`)
+- [x] Refresh Token Rotation (`POST /api/auth/refresh`)
+- [x] Single Device Logout (`POST /api/auth/logout`)
+- [x] Logout All Devices (`POST /api/auth/logout-all`)
 - [ ] Roles Guard & Authorization (`@Roles()`)
 
 ---
 
 ### 🔑 Dual-Token Architecture & Security Deep-Dive
+
+> [!NOTE]  
+> All endpoints are prefixed with `/api` (configured in `main.ts` via `app.setGlobalPrefix('api')`).
 
 #### 💡 Why Dual Tokens with Rotation? (Access vs. Refresh Tokens)
 
@@ -114,20 +119,25 @@ In web applications, using a single token causes trade-offs between security and
 
 Our system solves this using a **Dual-Token Architecture with Automatic Refresh Token Rotation**:
 
-1. **Access Token (Short-lived — 15 minutes)**
+1. **Email Verification Gate (Prerequisite)**
+   - Registration creates a user with `isEmailVerified = false` and generates a hashed 6-digit OTP (valid for 10 minutes, max 5 attempts).
+   - Unverified users cannot log in or generate JWT sessions until `POST /api/auth/verify-email` is completed successfully.
+
+2. **Access Token (Short-lived — 15 minutes)**
    - **Why**: Used for authenticating every API request. Short lifespan minimizes the vulnerability window if a token is intercepted.
    - **How**: Fully **stateless**. Verified in-memory by cryptographic signature (`JWT_SECRET`) in `JwtStrategy` without hitting PostgreSQL, preserving database performance.
-   - **When**: Sent by the client in the `Authorization: Bearer <token>` header on every protected request (e.g., `GET /auth/me`, purchasing, reading).
+   - **When**: Sent by the client in the `Authorization: Bearer <token>` header on every protected request (e.g., `GET /api/auth/me`, purchasing, reading).
 
-2. **Refresh Token (Long-lived — 30 days) with Rotation**
+3. **Refresh Token (Long-lived — 30 days) with Rotation & Session Management**
    - **Why**: Allows users to stay authenticated seamlessly without re-entering credentials.
-   - **Rotation Security**: Every time `POST /auth/refresh` is called, the used Refresh Token is **immediately consumed and revoked** (`revokedAt = NOW()`), and a brand-new Refresh Token + Access Token pair is issued. If an old consumed refresh token is ever reused, the request is instantly rejected.
-   - **How**: **Stateful & Hashed**. Signed with a distinct secret (`JWT_REFRESH_SECRET`) and stored as a **SHA-256 hash** in PostgreSQL (`auth.user_tokens`).
-   - **When**: Sent in the request body to `POST /auth/refresh` exclusively when the Access Token has expired.
+   - **Rotation Security**: Every time `POST /api/auth/refresh` is called, the used Refresh Token is **immediately consumed and revoked** (`revokedAt = NOW()`), and a brand-new Refresh Token + Access Token pair is issued. If an old consumed refresh token is ever reused, the request is instantly rejected.
+   - **Multi-Device Logout Support**: Supports revoking single device sessions (`POST /api/auth/logout`) or revoking **all** active device sessions simultaneously (`POST /api/auth/logout-all`).
+   - **How**: **Stateful & Hashed**. Signed with a distinct secret (`JWT_REFRESH_SECRET`) and stored as a **SHA-256 hash** in PostgreSQL (`auth.refresh_tokens`).
+   - **When**: Sent in the request body to `POST /api/auth/refresh` exclusively when the Access Token has expired.
 
 ---
 
-#### 🔄 Token Lifecycle & Rotation Sequence Flow
+#### 🔄 Token & Authentication Lifecycle Sequence Flow
 
 ```mermaid
 sequenceDiagram
@@ -136,21 +146,33 @@ sequenceDiagram
     participant Server as NestJS API
     participant DB as PostgreSQL DB
 
-    Note over Client, DB: 1. Authentication (Login / Register)
-    Client->>Server: POST /auth/login (email, password)
-    Server->>Server: Verify credentials & assigned roles
+    Note over Client, DB: 1. Registration & Email OTP Verification
+    Client->>Server: POST /api/auth/register (email, password, username)
+    Server->>DB: Save User (isEmailVerified = false)
+    Server->>Server: Generate cryptographically secure 6-digit OTP
+    Server->>DB: Store bcrypt hash of OTP in auth.otp_verifications
+    Server-->>Client: Return 201 "Registration successful. Please verify email."
+
+    Client->>Server: POST /api/auth/verify-email (email, otp)
+    Server->>DB: Fetch active OTP & verify bcrypt hash + attempt count + expiry
+    Server->>DB: Set OtpVerification.verified = true & User.isEmailVerified = true
+    Server-->>Client: Return 200 OK "Email verified successfully"
+
+    Note over Client, DB: 2. Authentication (Login)
+    Client->>Server: POST /api/auth/login (email, password)
+    Server->>Server: Verify credentials & enforce isEmailVerified === true
     Server->>Server: Generate Access Token A (15m, type: 'access')
     Server->>Server: Generate Refresh Token A (30d, type: 'refresh')
     Server->>DB: Save SHA-256 Hash of Refresh Token A
     Server-->>Client: Return { user, accessToken: A, refreshToken: A }
 
-    Note over Client, DB: 2. Accessing Protected Endpoints
-    Client->>Server: GET /auth/me (Headers: Authorization: Bearer <accessToken A>)
+    Note over Client, DB: 3. Accessing Protected Endpoints
+    Client->>Server: GET /api/auth/me (Headers: Authorization: Bearer <accessToken A>)
     Server->>Server: JwtStrategy verifies signature & payload.type === 'access'
     Server-->>Client: Return 200 OK User Profile
 
-    Note over Client, DB: 3. Token Rotation Flow (POST /auth/refresh)
-    Client->>Server: POST /auth/refresh (Body: { refreshToken: A })
+    Note over Client, DB: 4. Token Rotation Flow (POST /api/auth/refresh)
+    Client->>Server: POST /api/auth/refresh (Body: { refreshToken: A })
     Server->>Server: 1. Verify JWT Signature & Expiration
     Server->>Server: 2. Enforce payload.type === 'refresh'
     Server->>DB: 3. Verify SHA-256 Hash(A) exists & not revoked/expired
@@ -159,10 +181,14 @@ sequenceDiagram
     Server->>DB: 6. Save SHA-256 Hash of Refresh Token B
     Server-->>Client: Return { accessToken: B, refreshToken: B }
 
-    Note over Client, DB: 4. Attempting to Reuse Old Token A (Attack Simulation)
-    Client->>Server: POST /auth/refresh (Body: { refreshToken: A })
-    Server->>DB: Check Hash(A) → revokedAt IS NOT NULL!
-    Server-->>Client: 401 Unauthorized (Token Revoked / Reused)
+    Note over Client, DB: 5. Session Termination (Logout & Logout-All)
+    Client->>Server: POST /api/auth/logout (Revoke current token)
+    Server->>DB: Set revokedAt = NOW() for current refresh token
+    Server-->>Client: 204 No Content
+
+    Client->>Server: POST /api/auth/logout-all (Revoke all devices)
+    Server->>DB: UPDATE refresh_tokens SET revoked_at = NOW() WHERE user_id = :id AND revoked_at IS NULL
+    Server-->>Client: 204 No Content
 ```
 
 ---
@@ -170,33 +196,25 @@ sequenceDiagram
 #### 🔁 Detailed Breakdown: Refresh Token Rotation & Security Benefits
 
 ##### 1. The Security Problem Without Rotation (Static Refresh Tokens)
-In a static refresh token design, a single `Refresh Token A` remains valid for its entire 30-day lifespan. If an attacker intercepts or steals `Refresh Token A` (e.g. via XSS, local storage theft, or network interception):
-- The attacker can call `POST /auth/refresh` repeatedly for 30 days to obtain fresh access tokens.
-- The server has no automatic way of knowing that `Refresh Token A` was compromised or used by an unauthorized party.
+In a static refresh token design, a single `Refresh Token A` remains valid for its entire 30-day lifespan. If an attacker intercepts or steals `Refresh Token A`:
+- The attacker can call `POST /api/auth/refresh` repeatedly for 30 days to obtain fresh access tokens.
+- The server has no automatic way of knowing that `Refresh Token A` was compromised.
 
 ##### 2. The Solution: Single-Use Token Rotation
 With **Refresh Token Rotation**, every refresh token is **strictly single-use**. Consuming a refresh token automatically burns it and replaces it with a new pair:
 
-- **Step 1 (Request)**: Client sends `Refresh Token A` to `POST /auth/refresh`.
+- **Step 1 (Request)**: Client sends `Refresh Token A` to `POST /api/auth/refresh`.
 - **Step 2 (Verification)**: Server verifies JWT signature and looks up `Hash(Refresh Token A)` in PostgreSQL.
-- **Step 3 (Consumption & Revocation)**: Server marks `Refresh Token A` as revoked by setting `revokedAt = NOW()` in `auth.user_tokens`.
+- **Step 3 (Consumption & Revocation)**: Server marks `Refresh Token A` as revoked by setting `revokedAt = NOW()`.
 - **Step 4 (Issuance)**: Server generates a new `Access Token B` AND a new `Refresh Token B`.
 - **Step 5 (Persistence)**: Server saves `Hash(Refresh Token B)` into PostgreSQL and returns both tokens to the client.
 
 ##### 3. How Token Reuse Neutralizes Theft
-If an attacker attempts to use `Refresh Token A` after it has already been rotated by the legitimate user:
-1. The server computes `SHA256(Refresh Token A)` and queries `auth.user_tokens`.
+If an attacker attempts to use `Refresh Token A` after it has already been rotated:
+1. The server computes `SHA256(Refresh Token A)` and queries `auth.refresh_tokens`.
 2. The server detects that `revokedAt` is **NOT NULL** (token was already consumed).
 3. The server immediately aborts execution and returns `401 Unauthorized`.
-4. The stolen token is completely useless, protecting the user's account from unauthorized prolonged access.
-
-##### 4. Quick Summary Matrix (Why / How / When)
-
-| Aspect | Access Token | Refresh Token (with Rotation) |
-| :--- | :--- | :--- |
-| **Why?** | Short window of exposure if leaked; no DB query needed per request. | Keeps user logged in seamlessly while eliminating long-lived stolen token vulnerability. |
-| **How?** | Signed JWT (`JWT_SECRET`) containing `type: 'access'`, verified statelessly by `JwtStrategy`. | Signed JWT (`JWT_REFRESH_SECRET`) containing `type: 'refresh'`, verified statefully via SHA-256 DB hash; revoked upon usage and replaced. |
-| **When?** | Attached as `Authorization: Bearer <token>` on every API call. | Sent in request body to `POST /auth/refresh` only when Access Token expires (15 min). |
+4. The stolen token is completely useless.
 
 ---
 
@@ -204,12 +222,14 @@ If an attacker attempts to use `Refresh Token A` after it has already been rotat
 
 | Security Layer | Implementation & Purpose |
 | :--- | :--- |
+| **Email Verification Gate** | `isEmailVerified` must be `true` before `POST /api/auth/login` will issue tokens. Prevents unverified account access. |
+| **Hashed OTP & Attempt Limit** | OTP codes are 6-digit cryptographically secure numbers, bcrypt hashed, valid for 10 minutes, and capped at 5 attempts to prevent brute-forcing. |
 | **Strict Token Type Scoping** | Every payload includes `type: 'access'` or `type: 'refresh'`. This prevents cross-use of tokens. |
-| **Automatic Token Rotation** | Every refresh request revokes the old refresh token (`revokedAt = NOW()`) and issues a fresh pair, neutralizing stolen refresh tokens. |
-| **Protected API Defense** | `JwtStrategy` rejects any token where `type !== 'access'`. Passing a Refresh Token to a protected endpoint results in `401 Unauthorized`. |
-| **Refresh Endpoint Defense** | `AuthService.refresh()` enforces `type === 'refresh'`. Passing an Access Token to `POST /auth/refresh` results in `401 Unauthorized`. |
-| **Database Token Hashing** | Raw Refresh Tokens are **never** stored plain-text in the database. They are hashed using SHA-256 before persisting (`auth.user_tokens`). |
-| **Instant Revocation** | If a token is revoked or logged out, `revokedAt` is set in the DB, immediately blocking any subsequent refresh attempts. |
+| **Automatic Token Rotation** | Every refresh request revokes the old refresh token (`revokedAt = NOW()`) and issues a fresh pair. |
+| **Protected API Defense** | `JwtStrategy` rejects any token where `type !== 'access'`. |
+| **Refresh Endpoint Defense** | `AuthService.refresh()` enforces `type === 'refresh'`. |
+| **Database Token Hashing** | Raw Refresh Tokens are stored as SHA-256 hashes in `auth.refresh_tokens`. |
+| **Session Revocation (Logout / Logout All)** | Supports single-token revocation (`/auth/logout`) and revoking all active user sessions (`/auth/logout-all`). |
 
 ---
 
