@@ -102,7 +102,9 @@ Progress tracker for building the platform features.
 - [x] Refresh Token Rotation (`POST /api/auth/refresh`)
 - [x] Single Device Logout (`POST /api/auth/logout`)
 - [x] Logout All Devices (`POST /api/auth/logout-all`)
-- [ ] Roles Guard & Authorization (`@Roles()`)
+- [x] Global JWT Auth Guard (`APP_GUARD`) & `@Public()` Bypass Decorator
+- [x] `@CurrentUser()` Parameter Decorator & `JwtUser` Interface
+- [x] Roles Guard & Authorization (`@Roles()`, `RolesGuard`)
 
 ---
 

@@ -1,12 +1,13 @@
-import { Controller, Post, Body, HttpCode, HttpStatus, UseGuards, Get, Request } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiCreatedResponse } from '@nestjs/swagger';
+import { Controller, Post, Body, HttpCode, HttpStatus, Get } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiResponse, ApiCreatedResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
 import { LoginDto, RegisterDto } from './dto/register.dto';
 import { AuthResponseDto } from './dto/auth-response.dto';
-import { JwtAuthGuard } from './guards/jwt-auth.guard';
-
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
+import { Public } from './decorators/public.decorator';
+import { CurrentUser } from './decorators/current-user.decorator';
+import type { JwtUser } from './interfaces/jwt-user.interface';
 
 @ApiTags('Authentication')
 @Controller('auth')
@@ -14,6 +15,7 @@ export class AuthController {
     constructor(private readonly authService: AuthService) { }
 
     @Post('register')
+    @Public()
     @HttpCode(HttpStatus.CREATED)
     @ApiOperation({ summary: 'Register a new user' })
     @ApiCreatedResponse({
@@ -26,6 +28,7 @@ export class AuthController {
     }
 
     @Post('verify-email')
+    @Public()
     @HttpCode(HttpStatus.OK)
     @ApiOperation({ summary: 'Verify user email address using OTP code' })
     @ApiResponse({ status: 200, description: 'Email successfully verified.' })
@@ -35,6 +38,7 @@ export class AuthController {
     }
 
     @Post('login')
+    @Public()
     @HttpCode(HttpStatus.OK)
     @ApiOperation({ summary: 'Login with email and password' })
     @ApiCreatedResponse({
@@ -48,6 +52,7 @@ export class AuthController {
     }
 
     @Post('refresh')
+    @Public()
     @HttpCode(HttpStatus.OK)
     @ApiOperation({ summary: 'Refresh access token using a valid refresh token' })
     @ApiResponse({ status: 200, description: 'Access token refreshed successfully.' })
@@ -57,28 +62,29 @@ export class AuthController {
     }
 
     @Post('logout')
-    @UseGuards(JwtAuthGuard)
+    @ApiBearerAuth()
     @HttpCode(HttpStatus.NO_CONTENT)
     @ApiOperation({ summary: 'Logout current session (revoke refresh token)' })
     @ApiResponse({ status: 204, description: 'Successfully logged out current session.' })
     @ApiResponse({ status: 401, description: 'Unauthorized.' })
-    async logout(@Request() req, @Body() dto: RefreshTokenDto): Promise<void> {
-        await this.authService.logout(req.user.userId, dto.refreshToken);
+    async logout(@CurrentUser() user: JwtUser, @Body() dto: RefreshTokenDto): Promise<void> {
+        await this.authService.logout(user.userId, dto.refreshToken);
     }
 
     @Post('logout-all')
-    @UseGuards(JwtAuthGuard)
+    @ApiBearerAuth()
     @HttpCode(HttpStatus.NO_CONTENT)
     @ApiOperation({ summary: 'Logout from all devices (revoke all active refresh tokens for user)' })
     @ApiResponse({ status: 204, description: 'Successfully logged out from all devices.' })
     @ApiResponse({ status: 401, description: 'Unauthorized.' })
-    async logoutAll(@Request() req): Promise<void> {
-        await this.authService.logoutAll(req.user.userId);
+    async logoutAll(@CurrentUser() user: JwtUser): Promise<void> {
+        await this.authService.logoutAll(user.userId);
     }
 
     @Get('me')
-    @UseGuards(JwtAuthGuard)
-    getMe(@Request() req) {
-        return req.user;
+    @ApiBearerAuth()
+    @ApiOperation({ summary: 'Get current authenticated user profile' })
+    getMe(@CurrentUser() user: JwtUser): JwtUser {
+        return user;
     }
 }
