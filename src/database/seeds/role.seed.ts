@@ -1,10 +1,11 @@
 import { Seeder } from "./seeder.interface";
 import { Role } from "../../auth/entities/role.entity";
 import { RoleType } from "../../common/enums/role.enum";
-import dataSource from "../data-source";
+import { DataSource } from "typeorm";
+import defaultDataSource from "../data-source";
 
 export class RoleSeeder implements Seeder {
-    async run(): Promise<void> {
+    async run(dataSource: DataSource = defaultDataSource): Promise<void> {
         const roleRepository = dataSource.getRepository(Role);
 
         const rolesToSeed = [
@@ -32,9 +33,9 @@ export class RoleSeeder implements Seeder {
                 // Insert only the missing ones
                 const newRole = roleRepository.create(roleData);
                 await roleRepository.save(newRole);
-                console.log(`✅ Seeded role: ${roleData.name}`);
+                console.log(`✅ [Seed] Created missing role: ${roleData.name}`);
             } else {
-                console.log(`ℹ️ Role already exists: ${roleData.name}`);
+                console.log(`ℹ️ [Seed] Role already exists: ${roleData.name}`);
             }
         }
     }
@@ -44,14 +45,14 @@ export class RoleSeeder implements Seeder {
 if (require.main === module || (process.argv[1] && process.argv[1].endsWith('role.seed.ts'))) {
     (async () => {
         console.log('🌱 Initializing Database for RoleSeeder...');
-        await dataSource.initialize();
+        await defaultDataSource.initialize();
         try {
-            await new RoleSeeder().run();
+            await new RoleSeeder().run(defaultDataSource);
             console.log('🌱 Seeding completed successfully!');
         } catch (error) {
             console.error('❌ Seeding failed:', error);
         } finally {
-            await dataSource.destroy();
+            await defaultDataSource.destroy();
         }
     })();
-}
+}

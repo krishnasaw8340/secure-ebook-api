@@ -25,42 +25,86 @@ The project supports environment-specific configurations loaded via `cross-env`:
 
 ---
 
-## 🗄️ Database Management (Migrations & Seeds)
+## 🗄️ Database Management (Migrations, Auto-Seeding & CLI)
 
-We use a standalone TypeORM DataSource configuration ([data-source.ts](file:///c:/2026%20Projects/kuroyomi-api/ebook-api/src/database/data-source.ts)) to handle migrations and custom seeds.
+We use a standalone TypeORM DataSource configuration ([data-source.ts](file:///c:/2026%20Projects/kuroyomi-api/ebook-api/src/database/data-source.ts)) and NestJS bootstrap hooks to handle migrations, automatic schema sync, and idempotent seeding.
 
-### 📊 Migrations
+---
+
+### 🚀 Setting Up on a Fresh / New Database
+
+When connecting to a brand new database (e.g. Docker, AWS RDS, Supabase, Neon), you have two options:
+
+#### Option 1: Automatic Migration & Seeding (Recommended)
+Starting the app automatically runs all pending migrations and inserts missing baseline seed data on startup:
+```bash
+pnpm run start:dev
+```
+* **Auto-Migrations**: `migrationsRun: true` in `DatabaseModule` automatically executes pending migrations to create the `auth` schema, tables, indexes, and relations.
+* **Auto-Seeding**: `DatabaseSeederService` automatically checks for required baseline records (e.g., `SUPER_ADMIN`, `ADMIN`, `USER` roles) and creates any missing ones.
+
+#### Option 2: Manual CLI Steps
+If you prefer running the schema migrations and seeds before starting the server:
+```bash
+# 1. Apply schema migrations
+pnpm migration:run
+
+# 2. Seed baseline data (Roles, etc.)
+pnpm seed
+```
+
+---
+
+### 📊 Migration Commands
 
 To keep the database schema in sync with TypeORM entities:
 
-*   **Generate a Migration:**
-    ```bash
-    pnpm migration:generate src/database/migrations/<MigrationName>
-    ```
-*   **Run Pending Migrations:**
-    ```bash
-    pnpm migration:run
-    ```
-*   **Revert Last Migration:**
-    ```bash
-    pnpm migration:revert
-    ```
+* **Generate a New Migration:**
+  ```bash
+  pnpm migration:generate src/database/migrations/<MigrationName>
+  ```
+* **Run Pending Migrations:**
+  ```bash
+  pnpm migration:run
+  ```
+* **Revert Last Migration:**
+  ```bash
+  pnpm migration:revert
+  ```
 
-> [!WARNING]
-> If you are using a custom PostgreSQL schema (such as `"auth"`), TypeORM will **not** automatically create it. Always add `await queryRunner.query('CREATE SCHEMA IF NOT EXISTS "auth"');` at the beginning of the generated `up` method.
+> [!TIP]
+> If you are using custom PostgreSQL schemas (such as `"auth"`), always ensure `CREATE SCHEMA IF NOT EXISTS "auth"` is at the top of the `up` method.
 
-### 🌱 Seeding (Idempotent)
+---
 
-Seeds populate the database with default data without creating duplicates.
+### 🌱 Seeding Commands (Idempotent)
 
-*   **Seed All Database Data:**
-    ```bash
-    pnpm seed
-    ```
-*   **Seed Roles Only (ADMIN/USER):**
-    ```bash
-    pnpm seed:roles
-    ```
+Seeds check if records already exist and only insert missing data without creating duplicates.
+
+* **Seed All Baseline Data:**
+  ```bash
+  pnpm seed
+  ```
+* **Seed Roles Only (`SUPER_ADMIN`, `ADMIN`, `USER`):**
+  ```bash
+  pnpm seed:roles
+  ```
+
+---
+
+### 🔧 Troubleshooting Migration Sync
+
+If a database schema was manually modified or dropped, but the `migrations` table still contains stale history:
+```bash
+# Clear the migrations tracking table
+pnpm typeorm query "TRUNCATE TABLE migrations;"
+
+# Re-run all migrations cleanly
+pnpm migration:run
+
+# Re-run seeds
+pnpm seed
+```
 
 ---
 

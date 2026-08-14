@@ -23,22 +23,22 @@ export class InitialAuthSchema1786079461230 implements MigrationInterface {
     }
 
     public async down(queryRunner: QueryRunner): Promise<void> {
-        await queryRunner.query(`ALTER TABLE "auth"."otp_verifications" DROP CONSTRAINT "FK_c7f1d281e1acc51e2a37889f5a9"`);
-        await queryRunner.query(`ALTER TABLE "auth"."refresh_tokens" DROP CONSTRAINT "FK_3ddc983c5f7bcf132fd8732c3f4"`);
-        await queryRunner.query(`ALTER TABLE "auth"."user_roles" DROP CONSTRAINT "FK_b23c65e50a758245a33ee35fda1"`);
-        await queryRunner.query(`ALTER TABLE "auth"."user_roles" DROP CONSTRAINT "FK_87b8888186ca9769c960e926870"`);
-        await queryRunner.query(`DROP INDEX "auth"."IDX_e13f2874d645c0cd9964d06008"`);
-        await queryRunner.query(`DROP INDEX "auth"."IDX_c7f1d281e1acc51e2a37889f5a"`);
-        await queryRunner.query(`DROP TABLE "auth"."otp_verifications"`);
-        await queryRunner.query(`DROP TYPE "auth"."otp_verifications_purpose_enum"`);
-        await queryRunner.query(`DROP TABLE "auth"."users"`);
-        await queryRunner.query(`DROP TYPE "auth"."users_status_enum"`);
-        await queryRunner.query(`DROP INDEX "auth"."IDX_3ddc983c5f7bcf132fd8732c3f"`);
-        await queryRunner.query(`DROP TABLE "auth"."refresh_tokens"`);
-        await queryRunner.query(`DROP TABLE "auth"."user_roles"`);
-        await queryRunner.query(`DROP TABLE "auth"."roles"`);
-        await queryRunner.query(`DROP TYPE "auth"."roles_name_enum"`);
-        await queryRunner.query(`DROP SCHEMA IF EXISTS "auth"`);
+        await queryRunner.query(`ALTER TABLE IF EXISTS "auth"."otp_verifications" DROP CONSTRAINT IF EXISTS "FK_c7f1d281e1acc51e2a37889f5a9"`);
+        await queryRunner.query(`ALTER TABLE IF EXISTS "auth"."refresh_tokens" DROP CONSTRAINT IF EXISTS "FK_3ddc983c5f7bcf132fd8732c3f4"`);
+        await queryRunner.query(`ALTER TABLE IF EXISTS "auth"."user_roles" DROP CONSTRAINT IF EXISTS "FK_b23c65e50a758245a33ee35fda1"`);
+        await queryRunner.query(`ALTER TABLE IF EXISTS "auth"."user_roles" DROP CONSTRAINT IF EXISTS "FK_87b8888186ca9769c960e926870"`);
+        await queryRunner.query(`DROP INDEX IF EXISTS "auth"."IDX_e13f2874d645c0cd9964d06008"`);
+        await queryRunner.query(`DROP INDEX IF EXISTS "auth"."IDX_c7f1d281e1acc51e2a37889f5a"`);
+        await queryRunner.query(`DROP TABLE IF EXISTS "auth"."otp_verifications"`);
+        await queryRunner.query(`DROP TYPE IF EXISTS "auth"."otp_verifications_purpose_enum"`);
+        await queryRunner.query(`DROP TABLE IF EXISTS "auth"."users"`);
+        await queryRunner.query(`DROP TYPE IF EXISTS "auth"."users_status_enum"`);
+        await queryRunner.query(`DROP INDEX IF EXISTS "auth"."IDX_3ddc983c5f7bcf132fd8732c3f"`);
+        await queryRunner.query(`DROP TABLE IF EXISTS "auth"."refresh_tokens"`);
+        await queryRunner.query(`DROP TABLE IF EXISTS "auth"."user_roles"`);
+        await queryRunner.query(`DROP TABLE IF EXISTS "auth"."roles"`);
+        await queryRunner.query(`DROP TYPE IF EXISTS "auth"."roles_name_enum"`);
+        await queryRunner.query(`DROP SCHEMA IF EXISTS "auth" CASCADE`);
     }
 
 }

@@ -15,7 +15,7 @@ async function main() {
 
         for (const seeder of seeders) {
             console.log(`Running seeder: ${seeder.constructor.name}...`);
-            await seeder.run();
+            await seeder.run(dataSource);
         }
 
         console.log('🌱 All seeding completed successfully!');
