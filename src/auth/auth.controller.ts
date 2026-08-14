@@ -5,6 +5,7 @@ import { LoginDto, RegisterDto } from './dto/register.dto';
 import { AuthResponseDto } from './dto/auth-response.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
+import { ResendVerificationOtpDto } from './dto/resend-otp.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { Public } from './decorators/public.decorator';
@@ -37,6 +38,16 @@ export class AuthController {
     @ApiResponse({ status: 400, description: 'Invalid, expired, or max-attempted OTP code.' })
     async verifyEmail(@Body() dto: VerifyEmailDto) {
         return this.authService.verifyEmail(dto.email, dto.otp);
+    }
+
+    @Post('resend-verification-otp')
+    @Public()
+    @HttpCode(HttpStatus.OK)
+    @ApiOperation({ summary: 'Resend email verification OTP code' })
+    @ApiResponse({ status: 200, description: 'New OTP successfully sent via email.' })
+    @ApiResponse({ status: 400, description: 'Email already verified or user not found.' })
+    async resendVerificationOtp(@Body() dto: ResendVerificationOtpDto) {
+        return this.authService.resendVerificationOtp(dto.email);
     }
 
     @Post('forgot-password')
