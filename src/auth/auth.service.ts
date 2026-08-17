@@ -89,6 +89,33 @@ export class AuthService {
         };
     }
 
+    async resendVerificationOtp(email: string): Promise<{ message: string }> {
+        const user = await this.usersService.findByEmail(email);
+
+        // Prevent account enumeration by returning generic response if user doesn't exist
+        if (!user) {
+            return {
+                message: 'If the email exists and is unverified, a verification OTP has been sent.',
+            };
+        }
+
+        if (user.isEmailVerified) {
+            throw new BadRequestException('Email is already verified');
+        }
+
+        const otp = await this.otpService.generateAndSaveOtp(
+            user.id,
+            user.email,
+            OtpPurpose.REGISTER,
+        );
+
+        await this.mailService.sendVerificationOtp(user.email, otp);
+
+        return {
+            message: 'Verification OTP has been sent to your email.',
+        };
+    }
+
     async login(dto: LoginDto): Promise<AuthResponseDto> {
         // Step 1: Find user by email
         const user = await this.usersService.findByEmail(dto.email, true, true);
