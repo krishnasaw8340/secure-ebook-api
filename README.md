@@ -27,7 +27,7 @@ The project supports environment-specific configurations loaded via `cross-env`:
 
 ## 🗄️ Database Management (Migrations, Auto-Seeding & CLI)
 
-We use a standalone TypeORM DataSource configuration ([data-source.ts](file:///c:/2026%20Projects/kuroyomi-api/ebook-api/src/database/data-source.ts)) and NestJS bootstrap hooks to handle migrations, automatic schema sync, and idempotent seeding.
+We use a standalone TypeORM DataSource configuration ([data-source.ts](file:///home/krishna/Projects/secure-ebook-api/src/database/data-source.ts)) and NestJS bootstrap hooks to handle migrations, automatic schema sync, and idempotent seeding.
 
 ---
 
@@ -108,43 +108,54 @@ pnpm seed
 
 ---
 
-## 🛠️ Feature Checklist & Roadmap
+## 🗺️ Project Roadmap & Phase Tracker
 
-Progress tracker for building the platform features.
+Progress status across all 12 modules of the platform.
 
-### 🏗️ Infrastructure & Core Setup
+| Phase | Module / Milestone | Status | Description |
+| :--- | :--- | :---: | :--- |
+| **Phase 1** | **Foundation** | ✅ **DONE** | NestJS setup, PostgreSQL, TypeORM, environment configs, schema validation, migrations & seeding |
+| **Phase 2** | **Authentication** | ✅ **DONE** | Dual-token auth (JWT + rotation), email OTP verification, password reset, RBAC & decorators |
+| **Phase 3** | **User Module** | ⏳ **NEXT** | User profiles, account settings, preferences, avatars, reading history & activity |
+| **Phase 4** | **Catalog Module** | 📋 *Planned* | Manga/ebook series, volumes, chapters, categories, search, filtering & tags |
+| **Phase 5** | **Reading Module** | 📋 *Planned* | Chapter reader API, reading progress cloud sync, bookmarks & favorites |
+| **Phase 6** | **Wallet & Coins** | 📋 *Planned* | Virtual coins, balance management, transaction ledger, pay-per-chapter unlocking |
+| **Phase 7** | **Payment Module** | 📋 *Planned* | Payment gateway integration, coin bundles, webhooks, receipts & invoices |
+| **Phase 8** | **Admin / Content Management** | 📋 *Planned* | Admin dashboard APIs, manga/chapter uploads, user & role administration |
+| **Phase 9** | **File Storage & Image Delivery** | 📋 *Planned* | S3/R2 cloud storage, signed URLs, image optimization/WebP, CDN delivery |
+| **Phase 10** | **Production Hardening** | 📋 *Planned* | Rate limiting, Redis caching layer, health checks, APM & security policies |
+| **Phase 11** | **Testing** | 📋 *Planned* | Unit test suites, E2E integration tests, test fixtures, performance load testing |
+| **Phase 12** | **CI/CD + Staging + Production** | 📋 *Planned* | GitHub Actions pipelines, Docker containerization, staging & prod deployments |
+
+---
+
+### 📋 Detailed Phase Breakdown & Checklist
+
+#### 🏗️ Phase 1 — Foundation (✅ DONE)
 - [x] NestJS Application Initialization
 - [x] PostgreSQL Integration with TypeORM
 - [x] Environment Configuration (`.env.*` loader)
 - [x] Schema Validation via `Joi`
 - [x] Database Module & Logging Setup
-- [x] Authentication Entities (`User`, `Role`, `UserRole`, `RefreshToken`, `OtpVerification`)
 - [x] Database Migrations setup
 - [x] Seeding Infrastructure with Idempotent Role Seeder
 
-### 🔐 Authentication System
-
-#### Database & Infrastructure
+#### 🔐 Phase 2 — Authentication (✅ DONE)
 - [x] Auth Entities (`User`, `Role`, `UserRole`, `RefreshToken`, `OtpVerification`)
-- [x] Migrations & Schema Setup
+- [x] Migrations & Schema Setup (`auth` schema)
 - [x] Idempotent Seeders (`seed:roles`, `seed`)
-- [x] Config Module & Setup
 - [x] `PasswordService` (bcrypt hashing)
 - [x] `TokenService` (Access & Refresh tokens lifecycle)
 - [x] `UsersService` (User operations & role assignments)
 - [x] `RefreshTokenService` (Hashed token persistence & session revocation)
 - [x] `OtpService` (Cryptographically secure OTP generation, bcrypt hashing & attempt limiting)
 - [x] `MailService` (Nodemailer email delivery for OTP verification & password resets)
-
-#### Features & API Progress
 - [x] User Registration (`POST /api/auth/register`)
 - [x] Email OTP Verification (`POST /api/auth/verify-email`)
 - [x] User Login (`POST /api/auth/login`)
-- [x] JWT Strategy (`passport-jwt`)
-- [x] JWT Auth Guard (`JwtAuthGuard`)
+- [x] JWT Strategy (`passport-jwt`) & Auth Guards (`JwtAuthGuard`)
 - [x] Authenticated User Profile (`GET /api/auth/me`)
-- [x] Refresh Token API (`POST /api/auth/refresh`)
-- [x] Refresh Token Rotation (`POST /api/auth/refresh`)
+- [x] Refresh Token API with Automatic Rotation (`POST /api/auth/refresh`)
 - [x] Single Device Logout (`POST /api/auth/logout`)
 - [x] Logout All Devices (`POST /api/auth/logout-all`)
 - [x] Global JWT Auth Guard (`APP_GUARD`) & `@Public()` Bypass Decorator
@@ -152,6 +163,68 @@ Progress tracker for building the platform features.
 - [x] Forgot Password (`POST /api/auth/forgot-password`)
 - [x] Reset Password (`POST /api/auth/reset-password`)
 - [x] Roles Guard & Authorization (`@Roles()`, `RolesGuard`)
+
+#### 👤 Phase 3 — User Module (← NEXT)
+- [ ] User Profile Management (`GET /api/users/profile`, `PATCH /api/users/profile`)
+- [ ] User Preferences & Settings (Theme, Reading mode, Notifications)
+- [ ] Avatar Upload & Management
+- [ ] User Reading History & Activity Tracking
+- [ ] Account Deletion & Data Privacy
+
+#### 📚 Phase 4 — Catalog Module
+- [ ] Ebook / Manga Entities (Series, Volumes, Chapters, Authors, Artists, Genres, Tags)
+- [ ] Catalog Browsing & Filtering (Popular, Trending, New Releases, Genre Filter)
+- [ ] Full-text Search & Auto-complete
+- [ ] Manga/Book Detail API with Chapters List
+
+#### 📖 Phase 5 — Reading Module
+- [ ] Chapter Content & Page Delivery API
+- [ ] Reading Progress Tracking & Cloud Sync
+- [ ] Bookmarks & Favorites System
+- [ ] Reading Session Analytics
+
+#### 🪙 Phase 6 — Wallet & Coins
+- [ ] Coin Balance & Wallet Entity
+- [ ] Chapter Unlocking & Free-to-Paid Tiering
+- [ ] Coin Transaction Ledger & History
+- [ ] Daily Rewards / Free Coin Mechanisms
+
+#### 💳 Phase 7 — Payment Module
+- [ ] Payment Gateway Integration (Stripe / Razorpay / etc.)
+- [ ] Coin Bundle / Subscription Packages
+- [ ] Webhook Handling & Idempotent Verification
+- [ ] Invoices & Purchase Receipts
+
+#### 🛡️ Phase 8 — Admin / Content Management
+- [ ] Content Management CMS APIs (Create/Edit/Publish Manga & Chapters)
+- [ ] Batch Chapter / Page Uploader
+- [ ] User Management & Ban/Role Administration
+- [ ] Platform Analytics & Financial Reports
+
+#### ☁️ Phase 9 — File Storage & Image Delivery
+- [ ] Object Storage Integration (AWS S3 / Cloudflare R2)
+- [ ] Image Optimization & WebP Conversion Pipeline
+- [ ] Encrypted & Signed URLs for Page Delivery
+- [ ] Global CDN Integration
+
+#### 🔒 Phase 10 — Production Hardening
+- [ ] Distributed Rate Limiting (Redis / Throttler)
+- [ ] Redis Caching Layer for Catalog & Content
+- [ ] Health Checks & Readiness Probes (`@nestjs/terminus`)
+- [ ] Structured JSON Logging & APM (Winston / Pino / OpenTelemetry)
+- [ ] Security Audits, CORS, Helmet & CSP Policies
+
+#### 🧪 Phase 11 — Testing
+- [ ] Unit Tests for Auth, Users, Catalog & Payment Services
+- [ ] E2E Integration Test Suite for Critical Flows
+- [ ] Test Database Factory & Fixtures
+- [ ] Performance & Load Testing (k6 / Artillery)
+
+#### 🚀 Phase 12 — CI/CD + Staging + Production
+- [ ] GitHub Actions CI/CD Pipeline (Lint, Test, Build, Deploy)
+- [ ] Multi-stage Dockerfile & Container Orchestration (Docker Compose / K8s)
+- [ ] Staging Environment Automated Deployment
+- [ ] Production Environment Automated Zero-Downtime Deployment
 
 ---
 
