@@ -92,12 +92,15 @@ export class AuthService {
     async resendVerificationOtp(email: string): Promise<{ message: string }> {
         const user = await this.usersService.findByEmail(email);
 
+        // Prevent account enumeration by returning generic response if user doesn't exist
         if (!user) {
-            throw new BadRequestException('User with this email does not exist.');
+            return {
+                message: 'If the email exists and is unverified, a verification OTP has been sent.',
+            };
         }
 
         if (user.isEmailVerified) {
-            throw new BadRequestException('Email is already verified. Please log in.');
+            throw new BadRequestException('Email is already verified');
         }
 
         const otp = await this.otpService.generateAndSaveOtp(
@@ -109,7 +112,7 @@ export class AuthService {
         await this.mailService.sendVerificationOtp(user.email, otp);
 
         return {
-            message: 'A new verification OTP has been sent to your email.',
+            message: 'Verification OTP has been sent to your email.',
         };
     }
 
