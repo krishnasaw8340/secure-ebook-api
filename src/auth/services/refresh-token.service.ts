@@ -9,7 +9,7 @@ export class RefreshTokenService {
     constructor(
         @InjectRepository(RefreshToken)
         private readonly refreshTokenRepository: Repository<RefreshToken>,
-    ) {}
+    ) { }
 
     // Hash token using SHA-256
     hashToken(token: string): string {
@@ -32,6 +32,7 @@ export class RefreshTokenService {
             deviceName,
             ipAddress,
             userAgent,
+            lastUsedAt: new Date(),
         });
         return this.refreshTokenRepository.save(refreshToken);
     }
@@ -46,6 +47,7 @@ export class RefreshTokenService {
         // Calculate default expiresAt of 30 days
         const expiresAt = new Date();
         expiresAt.setDate(expiresAt.getDate() + 30);
+
         return this.create(userId, token, expiresAt, deviceName, ipAddress, userAgent);
     }
 

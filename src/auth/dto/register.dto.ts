@@ -1,6 +1,6 @@
-import { IsEmail, IsEnum, IsNotEmpty, IsString, MinLength } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
-import { RoleType } from 'src/common/enums/role.enum';
+import { IsEmail, IsEnum, IsNotEmpty, IsOptional, IsString, MinLength } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { RoleType } from '../../common/enums/role.enum';
 
 export class RegisterDto {
     @ApiProperty({ example: 'user@example.com', description: 'User email address' })
@@ -41,4 +41,10 @@ export class LoginDto {
     @MinLength(8, { message: 'Password must be at least 8 characters long' })
     @IsNotEmpty()
     password: string;
+
+    @ApiPropertyOptional({ example: 'Chrome on macOS', description: 'Optional custom device name' })
+    @IsString()
+    @IsOptional()
+    deviceName?: string;
 }
+
