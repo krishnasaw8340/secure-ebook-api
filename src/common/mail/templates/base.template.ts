@@ -13,7 +13,9 @@ export interface BaseEmailTemplateOptions {
  * Generates the master responsive HTML email layout for Kuroyomi Ebook.
  * Designed for universal email client compatibility (Gmail, Outlook, Apple Mail, iOS, Android).
  */
-export function renderBaseEmailTemplate(options: BaseEmailTemplateOptions): string {
+export function renderBaseEmailTemplate(
+  options: BaseEmailTemplateOptions,
+): string {
   const currentYear = new Date().getFullYear();
   const preheader = options.preheader || options.title;
   const badgeText = options.badgeText || 'SECURITY NOTIFICATION';

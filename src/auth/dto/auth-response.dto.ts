@@ -1,49 +1,48 @@
 import { ApiProperty } from '@nestjs/swagger';
 
 class UserResponseDto {
-    @ApiProperty()
-    id: string;
+  @ApiProperty()
+  id: string;
 
-    @ApiProperty()
-    email: string;
+  @ApiProperty()
+  email: string;
 
-    @ApiProperty({ required: false })
-    username?: string;
+  @ApiProperty({ required: false })
+  username?: string;
 
-    @ApiProperty()
-    fullName: string;
+  @ApiProperty()
+  fullName: string;
 
-    @ApiProperty({ required: false })
-    avatarUrl?: string;
+  @ApiProperty({ required: false })
+  avatarUrl?: string;
 
-    @ApiProperty()
-    isEmailVerified: boolean;
+  @ApiProperty()
+  isEmailVerified: boolean;
 
-    @ApiProperty()
-    status: string;
+  @ApiProperty()
+  status: string;
 
-    @ApiProperty()
-    createdAt: Date;
+  @ApiProperty()
+  createdAt: Date;
 
-    @ApiProperty()
-    updatedAt: Date;
+  @ApiProperty()
+  updatedAt: Date;
 }
 
 export class AuthResponseDto {
-    @ApiProperty({ type: UserResponseDto })
-    user: UserResponseDto;
+  @ApiProperty({ type: UserResponseDto })
+  user: UserResponseDto;
 
-    @ApiProperty()
-    accessToken: string;
+  @ApiProperty()
+  accessToken: string;
 
-    @ApiProperty()
-    refreshToken: string;
+  @ApiProperty()
+  refreshToken: string;
 }
 
 export class LoginDto {
-    @ApiProperty()
-    email: string;
-    @ApiProperty()
-    password: string;
+  @ApiProperty()
+  email: string;
+  @ApiProperty()
+  password: string;
 }
-

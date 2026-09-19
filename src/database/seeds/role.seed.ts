@@ -1,58 +1,61 @@
-import { Seeder } from "./seeder.interface";
-import { Role } from "../../auth/entities/role.entity";
-import { RoleType } from "../../common/enums/role.enum";
-import { DataSource } from "typeorm";
-import defaultDataSource from "../data-source";
+import { Seeder } from './seeder.interface';
+import { Role } from '../../auth/entities/role.entity';
+import { RoleType } from '../../common/enums/role.enum';
+import { DataSource } from 'typeorm';
+import defaultDataSource from '../data-source';
 
 export class RoleSeeder implements Seeder {
-    async run(dataSource: DataSource = defaultDataSource): Promise<void> {
-        const roleRepository = dataSource.getRepository(Role);
+  async run(dataSource: DataSource = defaultDataSource): Promise<void> {
+    const roleRepository = dataSource.getRepository(Role);
 
-        const rolesToSeed = [
-            {
-                name: RoleType.ADMIN,
-                description: 'Administrator with management access'
-            },
-            {
-                name: RoleType.USER,
-                description: 'Standard registered user'
-            },
-            {
-                name: RoleType.SUPER_ADMIN,
-                description: 'Super Admin'
-            },
-        ];
+    const rolesToSeed = [
+      {
+        name: RoleType.ADMIN,
+        description: 'Administrator with management access',
+      },
+      {
+        name: RoleType.USER,
+        description: 'Standard registered user',
+      },
+      {
+        name: RoleType.SUPER_ADMIN,
+        description: 'Super Admin',
+      },
+    ];
 
-        for (const roleData of rolesToSeed) {
-            // Check if the role already exists
-            const existingRole = await roleRepository.findOne({
-                where: { name: roleData.name }
-            });
+    for (const roleData of rolesToSeed) {
+      // Check if the role already exists
+      const existingRole = await roleRepository.findOne({
+        where: { name: roleData.name },
+      });
 
-            if (!existingRole) {
-                // Insert only the missing ones
-                const newRole = roleRepository.create(roleData);
-                await roleRepository.save(newRole);
-                console.log(`✅ [Seed] Created missing role: ${roleData.name}`);
-            } else {
-                console.log(`ℹ️ [Seed] Role already exists: ${roleData.name}`);
-            }
-        }
+      if (!existingRole) {
+        // Insert only the missing ones
+        const newRole = roleRepository.create(roleData);
+        await roleRepository.save(newRole);
+        console.log(`✅ [Seed] Created missing role: ${roleData.name}`);
+      } else {
+        console.log(`ℹ️ [Seed] Role already exists: ${roleData.name}`);
+      }
     }
+  }
 }
 
 // Support running the seed file directly via pnpm seed:roles
-if (require.main === module || (process.argv[1] && process.argv[1].endsWith('role.seed.ts'))) {
-    (async () => {
-        console.log('🌱 Initializing Database for RoleSeeder...');
-        await defaultDataSource.initialize();
-        try {
-            await new RoleSeeder().run(defaultDataSource);
-            console.log('🌱 Seeding completed successfully!');
-        } catch (error) {
-            console.error('❌ Seeding failed:', error);
-        } finally {
-            await defaultDataSource.destroy();
-        }
-    })();
-}
+if (
+  require.main === module ||
+  (process.argv[1] && process.argv[1].endsWith('role.seed.ts'))
+) {
+  void (async () => {
+    console.log('🌱 Initializing Database for RoleSeeder...');
+    await defaultDataSource.initialize();
+    try {
+      await new RoleSeeder().run(defaultDataSource);
+      console.log('🌱 Seeding completed successfully!');
+    } catch (error) {
+      console.error('❌ Seeding failed:', error);
+    } finally {
+      await defaultDataSource.destroy();
+    }
+  })();
+}

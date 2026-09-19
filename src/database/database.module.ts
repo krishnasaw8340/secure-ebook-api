@@ -5,49 +5,53 @@ import { DataSource } from 'typeorm';
 import { DatabaseSeederService } from './seeds/database-seeder.service';
 
 @Module({
-    imports: [
-        TypeOrmModule.forRootAsync({
-            imports: [ConfigModule],
-            inject: [ConfigService],
-            useFactory: (config: ConfigService) => ({
-                type: 'postgres',
-                host: config.get<string>('database.host'),
-                port: config.get<number>('database.port'),
-                username: config.get<string>('database.username'),
-                password: config.get<string>('database.password'),
-                database: config.get<string>('database.database'),
-                autoLoadEntities: true,
-                synchronize: false,
-                migrations: [__dirname + '/migrations/*{.ts,.js}'],
-                migrationsRun: true,
-                logging: config.get<string>('app.env') !== 'production',
-            }),
-        }),
-    ],
-    providers: [DatabaseSeederService],
-    exports: [DatabaseSeederService],
+  imports: [
+    TypeOrmModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        type: 'postgres',
+        host: config.get<string>('database.host'),
+        port: config.get<number>('database.port'),
+        username: config.get<string>('database.username'),
+        password: config.get<string>('database.password'),
+        database: config.get<string>('database.database'),
+        autoLoadEntities: true,
+        synchronize: false,
+        migrations: [__dirname + '/migrations/*{.ts,.js}'],
+        migrationsRun: true,
+        logging: config.get<string>('app.env') !== 'production',
+      }),
+    }),
+  ],
+  providers: [DatabaseSeederService],
+  exports: [DatabaseSeederService],
 })
 export class DatabaseModule implements OnApplicationBootstrap {
-    private readonly logger = new Logger(DatabaseModule.name);
+  private readonly logger = new Logger(DatabaseModule.name);
 
-    constructor(
-        private readonly dataSource: DataSource,
-        private readonly seederService: DatabaseSeederService,
-    ) {}
+  constructor(
+    private readonly dataSource: DataSource,
+    private readonly seederService: DatabaseSeederService,
+  ) {}
 
-    async onApplicationBootstrap() {
-        if (this.dataSource.isInitialized) {
-            const options = this.dataSource.options as any;
-            this.logger.log('────────────────────────────────────────────');
-            this.logger.log(`✅ Database Connected successfully!`);
-            this.logger.log(`📌 Type     : ${options.type}`);
-            this.logger.log(`📌 Host     : ${options.host}`);
-            this.logger.log(`📌 Port     : ${options.port}`);
-            this.logger.log(`📌 Database : ${options.database}`);
-            this.logger.log('────────────────────────────────────────────');
+  async onApplicationBootstrap() {
+    if (this.dataSource.isInitialized) {
+      const options = this.dataSource.options;
+      const host = 'host' in options ? String(options.host) : 'localhost';
+      const port = 'port' in options ? String(options.port) : '5432';
+      const database = 'database' in options ? String(options.database) : '';
 
-            // Automatically check and insert any missing baseline seed data
-            await this.seederService.runSeeds();
-        }
+      this.logger.log('────────────────────────────────────────────');
+      this.logger.log(`✅ Database Connected successfully!`);
+      this.logger.log(`📌 Type     : ${options.type}`);
+      this.logger.log(`📌 Host     : ${host}`);
+      this.logger.log(`📌 Port     : ${port}`);
+      this.logger.log(`📌 Database : ${database}`);
+      this.logger.log('────────────────────────────────────────────');
+
+      // Automatically check and insert any missing baseline seed data
+      await this.seederService.runSeeds();
     }
-}
+  }
+}

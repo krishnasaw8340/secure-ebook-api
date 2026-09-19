@@ -9,7 +9,9 @@ export interface VerificationOtpTemplateOptions {
 /**
  * Generates a modern, responsive HTML email for user email verification OTP.
  */
-export function renderVerificationOtpTemplate(options: VerificationOtpTemplateOptions): {
+export function renderVerificationOtpTemplate(
+  options: VerificationOtpTemplateOptions,
+): {
   html: string;
   text: string;
   subject: string;
