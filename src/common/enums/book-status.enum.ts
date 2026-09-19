@@ -1,0 +1,6 @@
+export enum BookStatus {
+  DRAFT = 'DRAFT',
+  PUBLISHED = 'PUBLISHED',
+  UNPUBLISHED = 'UNPUBLISHED',
+  ARCHIVED = 'ARCHIVED',
+}

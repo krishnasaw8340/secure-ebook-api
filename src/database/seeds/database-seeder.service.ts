@@ -2,6 +2,10 @@ import { Injectable, Logger } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { Seeder } from './seeder.interface';
 import { RoleSeeder } from './role.seed';
+import { LanguageSeeder } from './language.seed';
+import { CategorySeeder } from './category.seed';
+import { GenreSeeder } from './genre.seed';
+import { TagSeeder } from './tag.seed';
 
 @Injectable()
 export class DatabaseSeederService {
@@ -18,7 +22,10 @@ export class DatabaseSeederService {
 
     const seeders: Seeder[] = [
       new RoleSeeder(),
-      // Register future seeders here (e.g., DefaultAdminSeeder, CategorySeeder, etc.)
+      new LanguageSeeder(),
+      new CategorySeeder(),
+      new GenreSeeder(),
+      new TagSeeder(),
     ];
 
     for (const seeder of seeders) {

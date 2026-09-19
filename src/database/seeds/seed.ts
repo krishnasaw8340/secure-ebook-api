@@ -1,5 +1,9 @@
 import dataSource from '../data-source';
 import { RoleSeeder } from './role.seed';
+import { LanguageSeeder } from './language.seed';
+import { CategorySeeder } from './category.seed';
+import { GenreSeeder } from './genre.seed';
+import { TagSeeder } from './tag.seed';
 
 async function main() {
   console.log('🌱 Starting database seeding (All)...');
@@ -9,7 +13,13 @@ async function main() {
 
   try {
     // Register all seeders to execute
-    const seeders = [new RoleSeeder()];
+    const seeders = [
+      new RoleSeeder(),
+      new LanguageSeeder(),
+      new CategorySeeder(),
+      new GenreSeeder(),
+      new TagSeeder(),
+    ];
 
     for (const seeder of seeders) {
       console.log(`Running seeder: ${seeder.constructor.name}...`);

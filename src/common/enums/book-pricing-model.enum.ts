@@ -1,0 +1,7 @@
+export enum BookPricingModel {
+  FREE = 'FREE',
+  PER_PAGE = 'PER_PAGE',
+  PER_CHAPTER = 'PER_CHAPTER',
+  PER_BOOK = 'PER_BOOK',
+  SUBSCRIPTION = 'SUBSCRIPTION',
+}
