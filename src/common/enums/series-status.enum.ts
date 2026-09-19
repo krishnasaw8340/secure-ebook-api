@@ -1,0 +1,8 @@
+export enum SeriesStatus {
+  DRAFT = 'DRAFT',
+  ONGOING = 'ONGOING',
+  COMPLETED = 'COMPLETED',
+  HIATUS = 'HIATUS',
+  PUBLISHED = 'PUBLISHED',
+  ARCHIVED = 'ARCHIVED',
+}
