@@ -9,7 +9,9 @@ export interface PasswordResetOtpTemplateOptions {
 /**
  * Generates a modern, responsive HTML email for password reset OTP.
  */
-export function renderPasswordResetOtpTemplate(options: PasswordResetOtpTemplateOptions): {
+export function renderPasswordResetOtpTemplate(
+  options: PasswordResetOtpTemplateOptions,
+): {
   html: string;
   text: string;
   subject: string;

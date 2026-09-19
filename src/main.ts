@@ -11,17 +11,25 @@ async function bootstrap() {
     origin: true,
     credentials: true,
     methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Accept', 'Authorization', 'X-Requested-With', 'Origin'],
+    allowedHeaders: [
+      'Content-Type',
+      'Accept',
+      'Authorization',
+      'X-Requested-With',
+      'Origin',
+    ],
   });
 
   // Set global prefix
   app.setGlobalPrefix('api');
 
   // Configure ValidationPipe globally
-  app.useGlobalPipes(new ValidationPipe({
-    whitelist: true,
-    transform: true,
-  }));
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      transform: true,
+    }),
+  );
 
   // Configure Swagger
   const config = new DocumentBuilder()
@@ -36,6 +44,8 @@ async function bootstrap() {
   const port = process.env.PORT ?? 3000;
   await app.listen(port);
   console.log(`🚀 Application is running on: http://localhost:${port}/api`);
-  console.log(`📖 Swagger documentation is available at: http://localhost:${port}/docs`);
+  console.log(
+    `📖 Swagger documentation is available at: http://localhost:${port}/docs`,
+  );
 }
-bootstrap();
+void bootstrap();

@@ -3,32 +3,36 @@ import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { ConfigService } from '@nestjs/config';
 import { JwtPayload } from '../interfaces/jwt-payload.interface';
+import type { JwtUser } from '../interfaces/jwt-user.interface';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy, 'jwt') {
-    constructor(private readonly configService: ConfigService) {
-        const secret = configService.get<string>('jwt.secret') || configService.get<string>('jwt.accessSecret') || 'secret';
-        const issuer = configService.get<string>('jwt.issuer');
-        const audience = configService.get<string>('jwt.audience');
+  constructor(private readonly configService: ConfigService) {
+    const secret =
+      configService.get<string>('jwt.secret') ||
+      configService.get<string>('jwt.accessSecret') ||
+      'secret';
+    const issuer = configService.get<string>('jwt.issuer');
+    const audience = configService.get<string>('jwt.audience');
 
-        super({
-            jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
-            ignoreExpiration: false,
-            secretOrKey: secret,
-            ...(issuer ? { issuer } : {}),
-            ...(audience ? { audience } : {}),
-        });
+    super({
+      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+      ignoreExpiration: false,
+      secretOrKey: secret,
+      ...(issuer ? { issuer } : {}),
+      ...(audience ? { audience } : {}),
+    });
+  }
+
+  validate(payload: JwtPayload): JwtUser {
+    if (payload.type && payload.type !== 'access') {
+      throw new UnauthorizedException('Invalid token type');
     }
 
-    async validate(payload: JwtPayload) {
-        if (payload.type && payload.type !== 'access') {
-            throw new UnauthorizedException('Invalid token type');
-        }
-
-        return {
-            userId: payload.sub,
-            email: payload.email,
-            roles: payload.roles,
-        };
-    }
+    return {
+      userId: payload.sub,
+      email: payload.email,
+      roles: payload.roles,
+    };
+  }
 }

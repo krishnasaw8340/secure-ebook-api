@@ -21,14 +21,39 @@ import { MailModule } from '../common/mail/mail.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, Role, UserRole, RefreshToken, OtpVerification]),
+    TypeOrmModule.forFeature([
+      User,
+      Role,
+      UserRole,
+      RefreshToken,
+      OtpVerification,
+    ]),
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.register({}),
     UserModule,
     MailModule,
   ],
-  providers: [AuthService, PasswordService, TokenService, RefreshTokenService, OtpService, JwtStrategy, JwtAuthGuard, RolesGuard],
+  providers: [
+    AuthService,
+    PasswordService,
+    TokenService,
+    RefreshTokenService,
+    OtpService,
+    JwtStrategy,
+    JwtAuthGuard,
+    RolesGuard,
+  ],
   controllers: [AuthController],
-  exports: [AuthService, PasswordService, TokenService, RefreshTokenService, OtpService, JwtStrategy, JwtAuthGuard, RolesGuard, PassportModule],
+  exports: [
+    AuthService,
+    PasswordService,
+    TokenService,
+    RefreshTokenService,
+    OtpService,
+    JwtStrategy,
+    JwtAuthGuard,
+    RolesGuard,
+    PassportModule,
+  ],
 })
-export class AuthModule { }
+export class AuthModule {}
