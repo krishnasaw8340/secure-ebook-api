@@ -169,11 +169,22 @@ secure-ebook-api/
 │   │   ├── catalog.module.ts
 │   │   ├── catalog.controller.ts
 │   │   ├── catalog.service.ts
-│   │   └── entities/             # Book, Series, Chapter, and Page entities
-│   │       ├── book.entity.ts
+│   │   └── entities/             # 14 Domain Entities (Schema: "catalog")
+│   │       ├── artist.entity.ts
+│   │       ├── author.entity.ts
+│   │       ├── book-genre.entity.ts
 │   │       ├── book-series.entity.ts
-│   │       ├── chapters.entity.ts
-│   │       └── pages.entity.ts
+│   │       ├── book-tag.entity.ts
+│   │       ├── book.entity.ts
+│   │       ├── category.entity.ts
+│   │       ├── chapter.entity.ts
+│   │       ├── genre.entity.ts
+│   │       ├── index.ts          # Central barrel exporter
+│   │       ├── language.entity.ts
+│   │       ├── media-asset.entity.ts
+│   │       ├── page.entity.ts
+│   │       ├── tag.entity.ts
+│   │       └── volume.entity.ts
 │   │
 │   ├── reading/                  # 📖 Reading Progress & Library Subsystem
 │   │   ├── reading.module.ts
@@ -205,9 +216,15 @@ secure-ebook-api/
 │   │   ├── entities/
 │   │   │   └── base.entity.ts    # UUID Primary key, created_at, updated_at timestamps
 │   │   ├── enums/
-│   │   │   ├── otp-purpose.enum.ts # REGISTER | LOGIN | FORGOT_PASSWORD
-│   │   │   ├── role.enum.ts        # SUPER_ADMIN | ADMIN | USER
-│   │   │   └── user-status.enum.ts # ACTIVE | INACTIVE | SUSPENDED
+│   │   │   ├── book-pricing-model.enum.ts    # FREE | PER_PAGE | PER_CHAPTER | PER_BOOK | SUBSCRIPTION
+│   │   │   ├── book-status.enum.ts           # DRAFT | PUBLISHED | UNPUBLISHED | ARCHIVED
+│   │   │   ├── chapter-pricing-model.enum.ts # FREE | PARTIAL_FREE | PAID
+│   │   │   ├── media-asset-type.enum.ts      # COVER | BANNER | THUMBNAIL | PROMOTION
+│   │   │   ├── otp-purpose.enum.ts           # REGISTER | LOGIN | FORGOT_PASSWORD
+│   │   │   ├── role.enum.ts                  # SUPER_ADMIN | ADMIN | USER
+│   │   │   ├── series-status.enum.ts         # DRAFT | ONGOING | COMPLETED | HIATUS | PUBLISHED | ARCHIVED
+│   │   │   ├── user-status.enum.ts           # ACTIVE | INACTIVE | SUSPENDED
+│   │   │   └── volume-status.enum.ts         # DRAFT | PUBLISHED | ARCHIVED
 │   │   └── mail/
 │   │       ├── mail.module.ts
 │   │       ├── mail.service.ts   # Nodemailer SMTP dispatcher
@@ -230,12 +247,17 @@ secure-ebook-api/
 │       ├── database.module.ts    # TypeOrmModule config with auto-migrations on boot
 │       ├── data-source.ts        # Standalone TypeORM DataSource CLI configuration
 │       ├── migrations/
-│       │   └── 1786079461230-InitialAuthSchema.ts # Schema migration for auth tables
+│       │   ├── 1786079461230-InitialAuthSchema.ts  # Schema migration for auth tables
+│       │   └── 1789834302660-CreateCatalogSchema.ts # Schema migration for 14 catalog tables
 │       └── seeds/
-│           ├── database-seeder.service.ts # Bootstrap seeder runner
+│           ├── database-seeder.service.ts # Bootstrap seeder runner (runs on app startup)
 │           ├── seeder.interface.ts
-│           ├── role.seed.ts      # Idempotent seed inserting default roles
-│           ├── seed.ts           # Standalone CLI seeder entrypoint
+│           ├── role.seed.ts      # Roles: SUPER_ADMIN, ADMIN, USER
+│           ├── language.seed.ts  # Languages: English (en), Japanese (ja), French (fr), German (de)
+│           ├── category.seed.ts  # Categories: Manga, Manhwa, Manhua, Novel, Light Novel
+│           ├── genre.seed.ts     # Genres: Action, Adventure, Comedy, Drama, Fantasy, Romance, etc.
+│           ├── tag.seed.ts       # Tags: School, Magic, Revenge, Time Travel, Pirates, Supernatural
+│           ├── seed.ts           # Standalone CLI seeder entrypoint (pnpm seed)
 │           └── index.ts
 ```
 
@@ -559,6 +581,265 @@ Manages verification and password reset OTP codes.
 | `expires_at` | `timestamptz` | `NOT NULL` | Expiration timestamp (10 minutes) |
 | `verified_at` | `timestamptz` | `NULLABLE` | Redemption timestamp |
 
+
+---
+
+### Catalog Schema & Content Hierarchy
+
+All manga and ebook content metadata are isolated in the dedicated PostgreSQL `"catalog"` schema.
+
+#### Domain Content Hierarchy
+
+The catalog architecture supports both episodic manga with multi-volume groupings and direct standalone digital releases without intermediate volume records:
+
+```
+BookSeries (Overall franchise, e.g., "One Piece")
+   │
+   ├── Volumes (Optional grouping, e.g., "Volume 1", "Volume 2")
+   │      │
+   │      └── Books (Digital language edition, e.g., "English Digital Edition")
+   │             │
+   │             ├── Chapters (Configured with free/paid pricing model)
+   │             │      │
+   │             │      └── Pages (Encrypted/clean object storage keys & dimensions)
+   │             │
+   │             ├── Language (Required, e.g., "en", "ja")
+   │             ├── Category (Required, e.g., "Manga", "Manhwa", "Novel")
+   │             ├── Author / Artist (Optional creator attribution)
+   │             └── BookGenres / BookTags (Junction entities to Genres and Tags)
+   │
+   └── Books (Direct Series Books, volume_id is NULL)
+          │
+          └── Chapters ──► Pages
+```
+
+#### Catalog ER Diagram
+
+```mermaid
+erDiagram
+    "catalog.book_series" ||--o{ "catalog.volumes" : "contains (1:N)"
+    "catalog.book_series" ||--o{ "catalog.books" : "has (1:N)"
+    "catalog.book_series" ||--o{ "catalog.media_assets" : "has banners/covers"
+    
+    "catalog.volumes" ||--o{ "catalog.books" : "groups (0..1:N)"
+    "catalog.volumes" ||--o{ "catalog.media_assets" : "has covers"
+
+    "catalog.books" ||--o{ "catalog.chapters" : "contains"
+    "catalog.books" ||--o{ "catalog.book_genres" : "classified into"
+    "catalog.books" ||--o{ "catalog.book_tags" : "tagged with"
+    "catalog.books" ||--o{ "catalog.media_assets" : "has covers/thumbs"
+    "catalog.books" }o--|| "catalog.languages" : "written in"
+    "catalog.books" }o--|| "catalog.categories" : "categorized as"
+    "catalog.books" }o--o| "catalog.authors" : "written by"
+    "catalog.books" }o--o| "catalog.artists" : "illustrated by"
+
+    "catalog.genres" ||--o{ "catalog.book_genres" : "assigned to"
+    "catalog.tags" ||--o{ "catalog.book_tags" : "assigned to"
+
+    "catalog.chapters" ||--o{ "catalog.pages" : "ordered pages"
+
+    "catalog.book_series" {
+        uuid id PK
+        varchar name "max 255 chars"
+        varchar slug UK "max 255 chars"
+        text description
+        enum status "DRAFT | ONGOING | COMPLETED | HIATUS | PUBLISHED | ARCHIVED"
+        timestamptz deleted_at "soft delete"
+    }
+
+    "catalog.volumes" {
+        uuid id PK
+        uuid series_id FK "REFERENCES catalog.book_series(id) ON DELETE CASCADE"
+        numeric volume_number "e.g. 1.00, 7.50"
+        varchar title "nullable"
+        varchar slug "indexed"
+        integer sort_order "default 0"
+        enum status "DRAFT | PUBLISHED | ARCHIVED"
+    }
+
+    "catalog.books" {
+        uuid id PK
+        uuid series_id FK "REFERENCES catalog.book_series(id) ON DELETE RESTRICT"
+        uuid volume_id FK "REFERENCES catalog.volumes(id) ON DELETE SET NULL"
+        uuid language_id FK "REFERENCES catalog.languages(id) ON DELETE RESTRICT"
+        uuid category_id FK "REFERENCES catalog.categories(id) ON DELETE RESTRICT"
+        uuid author_id FK "REFERENCES catalog.authors(id) ON DELETE SET NULL"
+        uuid artist_id FK "REFERENCES catalog.artists(id) ON DELETE SET NULL"
+        varchar title
+        varchar slug UK
+        enum status "DRAFT | PUBLISHED | UNPUBLISHED | ARCHIVED"
+        enum pricing_model "FREE | PER_PAGE | PER_CHAPTER | PER_BOOK | SUBSCRIPTION"
+        integer default_coin_per_page
+        integer default_free_chapters
+        boolean is_premium
+        numeric average_rating
+        bigint total_views
+    }
+
+    "catalog.chapters" {
+        uuid id PK
+        uuid book_id FK "REFERENCES catalog.books(id) ON DELETE CASCADE"
+        numeric chapter_number "e.g. 1.00, 10.50"
+        varchar title "nullable"
+        integer sort_order "deterministic sequence"
+        enum pricing_model "FREE | PARTIAL_FREE | PAID"
+        integer free_page_count
+        integer coin_cost
+        integer page_count
+        boolean published
+    }
+
+    "catalog.pages" {
+        uuid id PK
+        uuid chapter_id FK "REFERENCES catalog.chapters(id) ON DELETE CASCADE"
+        integer page_number "1-indexed"
+        integer sort_order "reading order"
+        varchar storage_key "R2/S3 object path"
+        varchar encrypted_key "DRM encryption key"
+        integer width "image dimensions"
+        integer height "image dimensions"
+        varchar mime_type
+        integer file_size
+        varchar checksum
+    }
+```
+
+---
+
+### Catalog Data Dictionary
+
+#### 6. Table: `catalog.book_series`
+Root manga/comic/novel series entity.
+
+| Column | Data Type | Constraints | Description |
+| :--- | :--- | :--- | :--- |
+| `id` | `uuid` | `PRIMARY KEY`, Default `uuid_generate_v4()` | Unique series ID |
+| `name` | `varchar(255)` | `NOT NULL` | Franchise series title |
+| `slug` | `varchar(255)` | `UNIQUE`, `NOT NULL`, Indexed | SEO-friendly URL slug |
+| `description` | `text` | `NULLABLE` | Series synopsis |
+| `status` | `enum` | Default `DRAFT` | `DRAFT`, `ONGOING`, `COMPLETED`, `HIATUS`, `PUBLISHED`, `ARCHIVED` |
+| `created_at` | `timestamptz` | `NOT NULL` | Creation timestamp |
+| `updated_at` | `timestamptz` | `NOT NULL` | Last update timestamp |
+| `deleted_at` | `timestamptz` | `NULLABLE` | Soft delete timestamp |
+
+#### 7. Table: `catalog.volumes`
+Represents an optional volume grouping within a series.
+
+| Column | Data Type | Constraints | Description |
+| :--- | :--- | :--- | :--- |
+| `id` | `uuid` | `PRIMARY KEY`, Default `uuid_generate_v4()` | Unique volume ID |
+| `series_id` | `uuid` | `FK -> catalog.book_series(id) ON DELETE CASCADE` | Parent series |
+| `volume_number`| `numeric(5, 2)` | `NOT NULL` | Volume number (supports decimals like 0.5) |
+| `title` | `varchar(255)` | `NULLABLE` | Optional volume subtitle |
+| `slug` | `varchar(255)` | `NOT NULL`, Indexed | Volume slug |
+| `description` | `text` | `NULLABLE` | Volume synopsis |
+| `sort_order` | `integer` | Default `0`, Indexed | Display sort order |
+| `release_date` | `date` | `NULLABLE` | Official release date |
+| `status` | `enum` | Default `DRAFT` | `DRAFT`, `PUBLISHED`, `ARCHIVED` |
+| `published_at` | `timestamptz` | `NULLABLE` | Publication timestamp |
+| `deleted_at` | `timestamptz` | `NULLABLE` | Soft delete timestamp |
+
+*Constraints*: `UNIQUE(series_id, volume_number)`, `INDEX(series_id, sort_order)`.
+
+#### 8. Table: `catalog.books`
+The digital readable edition/content item.
+
+| Column | Data Type | Constraints | Description |
+| :--- | :--- | :--- | :--- |
+| `id` | `uuid` | `PRIMARY KEY`, Default `uuid_generate_v4()` | Unique book ID |
+| `series_id` | `uuid` | `FK -> catalog.book_series(id) ON DELETE RESTRICT` | Required parent series |
+| `volume_id` | `uuid` | `FK -> catalog.volumes(id) ON DELETE SET NULL` | Optional parent volume |
+| `title` | `varchar(255)` | `NOT NULL` | Book title |
+| `japanese_title`| `varchar(255)` | `NULLABLE` | Native original script title |
+| `slug` | `varchar(255)` | `UNIQUE`, `NOT NULL`, Indexed | Unique URL identifier |
+| `description` | `text` | `NULLABLE` | Content overview |
+| `author_id` | `uuid` | `FK -> catalog.authors(id) ON DELETE SET NULL` | Author reference |
+| `artist_id` | `uuid` | `FK -> catalog.artists(id) ON DELETE SET NULL` | Illustrator reference |
+| `language_id` | `uuid` | `FK -> catalog.languages(id) ON DELETE RESTRICT` | Content language |
+| `category_id` | `uuid` | `FK -> catalog.categories(id) ON DELETE RESTRICT`| Content category (Manga/Novel) |
+| `status` | `enum` | Default `DRAFT` | `DRAFT`, `PUBLISHED`, `UNPUBLISHED`, `ARCHIVED` |
+| `pricing_model`| `enum` | Default `FREE` | `FREE`, `PER_PAGE`, `PER_CHAPTER`, `PER_BOOK`, `SUBSCRIPTION` |
+| `default_coin_per_page` | `integer` | Default `0` | Default unlocking cost per page |
+| `default_free_chapters` | `integer` | Default `0` | Number of starting free chapters |
+| `default_free_pages` | `integer` | Default `0` | Free preview page count |
+| `is_premium` | `boolean` | Default `false` | Flag for VIP/subscriber priority |
+| `total_chapters` | `integer` | Default `0` | Cached chapter counter |
+| `total_pages` | `integer` | Default `0` | Cached page counter |
+| `average_rating` | `numeric(3, 2)`| Default `0.00` | Rating aggregated score |
+| `total_views` | `bigint` | Default `0` | Aggregate reader view count |
+| `release_date` | `date` | `NULLABLE` | Content release date |
+| `published_at` | `timestamptz` | `NULLABLE` | Publication timestamp |
+| `created_by` | `uuid` | `NULLABLE`, Indexed | Auditing: Admin user creator ID |
+| `updated_by` | `uuid` | `NULLABLE` | Auditing: Admin user editor ID |
+| `deleted_at` | `timestamptz` | `NULLABLE` | Soft delete timestamp |
+
+#### 9. Table: `catalog.chapters`
+Chapter configuration and pricing overrides.
+
+| Column | Data Type | Constraints | Description |
+| :--- | :--- | :--- | :--- |
+| `id` | `uuid` | `PRIMARY KEY`, Default `uuid_generate_v4()` | Unique chapter ID |
+| `book_id` | `uuid` | `FK -> catalog.books(id) ON DELETE CASCADE` | Parent book |
+| `chapter_number`| `numeric(6, 2)` | `NOT NULL` | Chapter number (supports 10.5) |
+| `title` | `varchar(255)` | `NULLABLE` | Optional chapter title |
+| `sort_order` | `integer` | Default `0` | Deterministic sequence order |
+| `pricing_model`| `enum` | Default `FREE` | `FREE`, `PARTIAL_FREE`, `PAID` |
+| `free_page_count`| `integer` | Default `0` | Free pages in PARTIAL_FREE mode |
+| `coin_cost` | `integer` | Default `0` | Required coin unlocking fee |
+| `page_count` | `integer` | Default `0` | Total page count |
+| `published` | `boolean` | Default `false` | Publication visibility flag |
+| `published_at` | `timestamptz` | `NULLABLE` | Publication timestamp |
+| `deleted_at` | `timestamptz` | `NULLABLE` | Soft delete timestamp |
+
+*Constraints*: `INDEX(book_id, sort_order)`, `INDEX(book_id, chapter_number)`.
+
+#### 10. Table: `catalog.pages`
+Deterministic page assets, dimensions, and DRM storage references.
+
+| Column | Data Type | Constraints | Description |
+| :--- | :--- | :--- | :--- |
+| `id` | `uuid` | `PRIMARY KEY`, Default `uuid_generate_v4()` | Unique page ID |
+| `chapter_id` | `uuid` | `FK -> catalog.chapters(id) ON DELETE CASCADE`| Parent chapter |
+| `page_number` | `integer` | `NOT NULL` | Human-readable page number (1-indexed) |
+| `sort_order` | `integer` | Default `0`, Indexed | Reading canvas sequence order |
+| `storage_key` | `varchar(500)` | `NOT NULL` | Private Cloudflare R2 / S3 object key |
+| `encrypted_key`| `varchar(500)` | `NULLABLE` | AES-256 DRM encryption key metadata |
+| `width` | `integer` | `NULLABLE` | Pixel image width |
+| `height` | `integer` | `NULLABLE` | Pixel image height |
+| `mime_type` | `varchar(50)` | `NULLABLE` | MIME type (e.g., image/webp) |
+| `file_size` | `integer` | `NULLABLE` | Raw file size in bytes |
+| `checksum` | `varchar(64)` | `NULLABLE` | SHA-256 file integrity checksum |
+
+*Constraints*: `UNIQUE(chapter_id, page_number)`, `INDEX(chapter_id, sort_order)`.
+
+#### 11. Table: `catalog.media_assets`
+Media references for franchise covers, banners, and promotional artwork.
+
+| Column | Data Type | Constraints | Description |
+| :--- | :--- | :--- | :--- |
+| `id` | `uuid` | `PRIMARY KEY`, Default `uuid_generate_v4()` | Unique asset ID |
+| `asset_type` | `enum` | `NOT NULL` | `COVER`, `BANNER`, `THUMBNAIL`, `PROMOTION` |
+| `storage_key` | `varchar(500)` | `NOT NULL` | Private object storage key |
+| `mime_type` | `varchar(50)` | `NULLABLE` | Media MIME type |
+| `file_size` | `integer` | `NULLABLE` | File byte size |
+| `width` / `height` | `integer` | `NULLABLE` | Image dimensions |
+| `sort_order` | `integer` | Default `0` | Carousel display order |
+| `alt_text` | `varchar(255)` | `NULLABLE` | Accessibility text description |
+| `series_id` | `uuid` | `FK -> catalog.book_series(id) ON DELETE CASCADE` | Optional series link |
+| `volume_id` | `uuid` | `FK -> catalog.volumes(id) ON DELETE CASCADE` | Optional volume link |
+| `book_id` | `uuid` | `FK -> catalog.books(id) ON DELETE CASCADE` | Optional book link |
+
+#### 12–14. Reference & Junction Tables
+- **`catalog.authors`**: `id`, `name`, `slug` (UK), `bio`, `profile_image`, timestamps, `deleted_at`.
+- **`catalog.artists`**: `id`, `name`, `slug` (UK), `bio`, `profile_image`, timestamps, `deleted_at`.
+- **`catalog.languages`**: `id`, `name` (UK), `code` (UK, e.g., `en`, `ja`), timestamps.
+- **`catalog.categories`**: `id`, `name` (UK), `slug` (UK, e.g., `manga`, `novel`), `description`, timestamps.
+- **`catalog.genres`**: `id`, `name` (UK), `slug` (UK, e.g., `action`, `romance`), `description`, timestamps.
+- **`catalog.tags`**: `id`, `name` (UK), `slug` (UK, e.g., `magic`, `pirates`), `description`, timestamps.
+- **`catalog.book_genres`**: Junction with `UNIQUE(book_id, genre_id)`, cascades on deletion.
+- **`catalog.book_tags`**: Junction with `UNIQUE(book_id, tag_id)`, cascades on deletion.
+
+
 ---
 
 ### TypeORM Migration Management
@@ -574,6 +855,10 @@ pnpm migration:run
 
 # 3. Revert the last executed migration
 pnpm migration:revert
+
+### Applied Migration History
+1. `1786079461230-InitialAuthSchema.ts`: Creates PostgreSQL schema `"auth"`, `users`, `roles`, `user_roles`, `refresh_tokens`, and `otp_verifications`.
+2. `1789834302660-CreateCatalogSchema.ts`: Creates PostgreSQL schema `"catalog"`, all 14 catalog tables, enums, FK constraints, and composite reading indexes.
 ```
 
 > [!TIP]
@@ -585,13 +870,19 @@ pnpm migration:revert
 
 Seeders check for the existence of baseline records before inserting, making them safe to run repeatedly without producing duplicates or constraint violations.
 
-* **Automatic Boot Seeding**: On application startup, `DatabaseSeederService` automatically executes registered seeders.
+* **Automatic Boot Seeding**: On application startup, `DatabaseSeederService` automatically executes all registered baseline seeders.
+* **Registered Seeders**:
+  1. `RoleSeeder`: Baseline system roles (`SUPER_ADMIN`, `ADMIN`, `USER`).
+  2. `LanguageSeeder`: Core publishing languages (`English`, `Japanese`, `French`, `German`).
+  3. `CategorySeeder`: Content formats (`Manga`, `Manhwa`, `Manhua`, `Novel`, `Light Novel`).
+  4. `GenreSeeder`: Core catalog genres (`Action`, `Adventure`, `Comedy`, `Drama`, `Fantasy`, `Romance`, `Horror`, `Mystery`, `Sci-Fi`).
+  5. `TagSeeder`: Content theme tags (`School`, `Magic`, `Revenge`, `Time Travel`, `Pirates`, `Supernatural`).
 * **Manual Seeding CLI**:
   ```bash
-  # Run all registered seeders
+  # Run all registered seeders (Roles, Languages, Categories, Genres, Tags)
   pnpm seed
 
-  # Run roles seeder only (SUPER_ADMIN, ADMIN, USER)
+  # Run roles seeder only
   pnpm seed:roles
   ```
 
@@ -1157,7 +1448,7 @@ pnpm format
 | **Phase 1** | **Foundation & Architecture** | ✅ **DONE** | NestJS 11, PostgreSQL, TypeORM, env configurations, Joi schema validation, migrations & idempotent seeders. |
 | **Phase 2** | **Authentication & Security** | ✅ **DONE** | Dual-token auth (JWT + rotation), bcrypt OTP verification, password reset, RBAC guards, device detection, Swagger docs. |
 | **Phase 3** | **User Management Module** | ⏳ **IN PROGRESS** | User profiles, account settings, theme preferences, avatar uploads, reading activity logs. |
-| **Phase 4** | **Catalog & Content Engine** | 📋 *Planned* | Manga/ebook series, volumes, chapters, pages, genres, full-text search, filtering & tags. |
+| **Phase 4** | **Catalog & Content Engine** | ✅ **DONE** | 14 TypeORM entities, isolated PostgreSQL "catalog" schema, dual hierarchy (Series→Volume→Book & Series→Book), composite indexes, and idempotent master reference seeders. |
 | **Phase 5** | **Reading & Library Engine** | 📋 *Planned* | Page delivery API, cloud reading progress sync, bookmarks, favorites, and reading analytics. |
 | **Phase 6** | **Wallet & Virtual Coins** | 📋 *Planned* | Coin wallet balance, pay-per-chapter unlocking, transaction ledger, daily login reward coins. |
 | **Phase 7** | **Payment Gateway Integration** | 📋 *Planned* | Razorpay / Stripe integration, coin bundles, webhooks, invoice generation & purchase history. |
