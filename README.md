@@ -895,32 +895,105 @@ curl -X POST http://localhost:3000/api/auth/login \
 
 ---
 
-### 5. Get Current Authenticated Profile
+### 5. Get Current User Profile (Database Hydrated)
 
-Fetches the token payload from the stateless JWT without a database roundtrip.
+Fetches the complete, fresh user profile directly from PostgreSQL. This is the primary endpoint frontend apps use to populate user state on page load or refresh.
 
-- **Endpoint**: `GET /api/auth/me`
+- **Endpoint**: `GET /api/users/me`
 - **Access**: Protected (`Bearer <accessToken>`)
 - **HTTP Status**: `200 OK`
 
 #### cURL Request
 ```bash
-curl -X GET http://localhost:3000/api/auth/me \
+curl -X GET http://localhost:3000/api/users/me \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 ```
 
 #### JSON Response (`200 OK`)
 ```json
 {
-  "userId": "7b8e1f6e-9e2b-42b5-a3d8-55a5b5f25a3a",
+  "id": "7b8e1f6e-9e2b-42b5-a3d8-55a5b5f25a3a",
   "email": "otaku@example.com",
-  "roles": ["USER"]
+  "username": "kuroyomi_reader",
+  "fullName": "Ken Kaneki",
+  "avatarUrl": "https://cdn.kuroyomi.com/avatars/kaneki.webp",
+  "isEmailVerified": true,
+  "status": "ACTIVE",
+  "roles": ["USER"],
+  "createdAt": "2026-09-19T08:00:00.000Z",
+  "updatedAt": "2026-09-19T08:05:00.000Z"
 }
 ```
 
 ---
 
-### 6. Refresh Access Token (Token Rotation)
+### 6. Update User Profile
+
+Updates non-sensitive profile fields (`fullName`, `username`, `avatarUrl`). Prevents updating roles, passwords, verification status, or account status. Enforces uniqueness if username is changed.
+
+- **Endpoint**: `PATCH /api/users/me`
+- **Access**: Protected (`Bearer <accessToken>`)
+- **HTTP Status**: `200 OK`
+
+#### cURL Request
+```bash
+curl -X PATCH http://localhost:3000/api/users/me \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "fullName": "Ken Kaneki (Awakened)",
+    "username": "kaneki_ghoul",
+    "avatarUrl": "https://cdn.kuroyomi.com/avatars/kaneki-mask.webp"
+  }'
+```
+
+#### JSON Response (`200 OK`)
+```json
+{
+  "id": "7b8e1f6e-9e2b-42b5-a3d8-55a5b5f25a3a",
+  "email": "otaku@example.com",
+  "username": "kaneki_ghoul",
+  "fullName": "Ken Kaneki (Awakened)",
+  "avatarUrl": "https://cdn.kuroyomi.com/avatars/kaneki-mask.webp",
+  "isEmailVerified": true,
+  "status": "ACTIVE",
+  "roles": ["USER"],
+  "createdAt": "2026-09-19T08:00:00.000Z",
+  "updatedAt": "2026-09-19T08:15:00.000Z"
+}
+```
+
+---
+
+### 7. Change User Password
+
+Allows an authenticated user to change their password by validating their current password and supplying a new strong password. Automatically revokes all active refresh tokens / device sessions for security.
+
+- **Endpoint**: `PATCH /api/users/me/password`
+- **Access**: Protected (`Bearer <accessToken>`)
+- **HTTP Status**: `200 OK`
+
+#### cURL Request
+```bash
+curl -X PATCH http://localhost:3000/api/users/me/password \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
+  -H "Content-Type: application/json" \
+  -d '{
+    "currentPassword": "SecurePassword123!",
+    "newPassword": "NewSuperSecretPassword789!"
+  }'
+```
+
+#### JSON Response (`200 OK`)
+```json
+{
+  "message": "Password changed successfully. All active sessions have been logged out for security."
+}
+```
+
+---
+
+### 8. Refresh Access Token (Token Rotation)
 
 Consumes and revokes the provided Refresh Token, issuing a brand-new Access Token and a rotated Refresh Token.
 
@@ -948,7 +1021,7 @@ curl -X POST http://localhost:3000/api/auth/refresh \
 
 ---
 
-### 7. Single Device Session Logout
+### 9. Single Device Session Logout
 
 Revokes the specific refresh token session associated with the current device.
 
@@ -970,7 +1043,7 @@ curl -X POST http://localhost:3000/api/auth/logout \
 
 ---
 
-### 8. Logout From All Devices (Global Invalidation)
+### 10. Logout From All Devices (Global Invalidation)
 
 Revokes **all active refresh token sessions** across all devices for the authenticated user.
 
@@ -988,7 +1061,7 @@ curl -X POST http://localhost:3000/api/auth/logout-all \
 
 ---
 
-### 9. Forgot Password OTP Request
+### 11. Forgot Password OTP Request
 
 Dispatches a password reset OTP email. Returns an identical response regardless of whether the email exists to prevent user harvesting.
 
@@ -1014,7 +1087,7 @@ curl -X POST http://localhost:3000/api/auth/forgot-password \
 
 ---
 
-### 10. Reset Password via OTP
+### 12. Reset Password via OTP
 
 Verifies the reset OTP, updates the user's password hash, and immediately terminates all active refresh token sessions across all devices for security.
 

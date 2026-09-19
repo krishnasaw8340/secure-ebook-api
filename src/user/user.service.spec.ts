@@ -4,6 +4,8 @@ import { UsersService } from './services/users.service';
 import { User } from '../auth/entities/user.entity';
 import { Role } from '../auth/entities/role.entity';
 import { UserRole } from '../auth/entities/user-role.entity';
+import { RefreshToken } from '../auth/entities/refresh-token.entity';
+import { PasswordService } from '../common/services/password.service';
 
 describe('UsersService', () => {
   let service: UsersService;
@@ -15,6 +17,11 @@ describe('UsersService', () => {
         { provide: getRepositoryToken(User), useValue: {} },
         { provide: getRepositoryToken(Role), useValue: {} },
         { provide: getRepositoryToken(UserRole), useValue: {} },
+        { provide: getRepositoryToken(RefreshToken), useValue: {} },
+        {
+          provide: PasswordService,
+          useValue: { hash: jest.fn(), compare: jest.fn() },
+        },
       ],
     }).compile();
 
