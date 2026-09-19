@@ -33,13 +33,44 @@ async function bootstrap() {
 
   // Configure Swagger
   const config = new DocumentBuilder()
-    .setTitle('Kuroyomi Ebook API')
-    .setDescription('Secure API for manga & ebook reading platform')
+    .setTitle('Kuroyomi Ebook & Manga API')
+    .setDescription(
+      'Secure, high-performance, enterprise-grade backend REST API for digital manga, comic, light novel, and ebook reading platforms.',
+    )
     .setVersion('1.0')
     .addBearerAuth()
+    .addTag(
+      'Authentication',
+      'Dual-token auth, OTP verification, session & password recovery',
+    )
+    .addTag(
+      'Users',
+      'User profile management, account settings & password updates',
+    )
+    .addTag(
+      'Series',
+      'Franchise series catalog management (CRUD, search, pagination, visibility scoping)',
+    )
+    .addTag(
+      'Volumes',
+      'Series volume groupings (CRUD, ordering, visibility scoping)',
+    )
+    .addTag(
+      'Books',
+      'Digital books and language editions (CRUD, relations, pricing models, visibility scoping)',
+    )
+    .addTag(
+      'Chapters',
+      'Chapter reading items (CRUD, pricing models FREE/PARTIAL_FREE/PAID, sort ordering, visibility scoping)',
+    )
     .build();
   const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('docs', app, document);
+  SwaggerModule.setup('docs', app, document, {
+    swaggerOptions: {
+      persistAuthorization: true,
+    },
+    customSiteTitle: 'Kuroyomi API Documentation',
+  });
 
   const port = process.env.PORT ?? 3000;
   await app.listen(port);

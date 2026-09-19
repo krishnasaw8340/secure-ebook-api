@@ -32,16 +32,12 @@
    - [Step 5: Launching the Application](#step-5-launching-the-application)
    - [Step 6: Interactive Swagger API Explorer](#step-6-interactive-swagger-api-explorer)
 6. [📡 Complete API Reference & Developer Cookbook](#-complete-api-reference--developer-cookbook)
-   - [1. User Registration](#1-user-registration)
-   - [2. Verify Email via OTP](#2-verify-email-via-otp)
-   - [3. Resend Verification OTP](#3-resend-verification-otp)
-   - [4. User Login & Token Generation](#4-user-login--token-generation)
-   - [5. Get Current Authenticated Profile](#5-get-current-authenticated-profile)
-   - [6. Refresh Access Token (Token Rotation)](#6-refresh-access-token-token-rotation)
-   - [7. Single Device Session Logout](#7-single-device-session-logout)
-   - [8. Logout From All Devices (Global Invalidation)](#8-logout-from-all-devices-global-invalidation)
-   - [9. Forgot Password OTP Request](#9-forgot-password-otp-request)
-   - [10. Reset Password via OTP](#10-reset-password-via-otp)
+   - [6.1 Authentication & Security Endpoints](#61-authentication--security-endpoints)
+   - [6.2 User Profile Management](#62-user-profile-management)
+   - [6.3 Series Catalog Management](#63-series-catalog-management)
+   - [6.4 Volume Catalog Management](#64-volume-catalog-management)
+   - [6.5 Book Catalog Management](#65-book-catalog-management)
+   - [6.6 Chapter Catalog Management](#66-chapter-catalog-management)
 7. [📧 Transactional Email & Notification System](#-transactional-email--notification-system)
 8. [🧪 Testing & Code Quality Assurance](#-testing--code-quality-assurance)
 9. [🗺️ Master Project Roadmap & Milestone Tracker (Phases 1–12)](#️-master-project-roadmap--milestone-tracker-phases-112)
@@ -1051,7 +1047,9 @@ Visit [`http://localhost:3000/docs`](http://localhost:3000/docs) in your browser
 
 ---
 
-### 1. User Registration
+### 6.1 Authentication & Security Endpoints
+
+#### 1. User Registration
 
 Creates a new user in the database with `isEmailVerified = false`, assigns the default `USER` role, generates a 6-digit OTP, and emails it to the user.
 
@@ -1186,7 +1184,9 @@ curl -X POST http://localhost:3000/api/auth/login \
 
 ---
 
-### 5. Get Current User Profile (Database Hydrated)
+### 6.2 User Profile Management
+
+#### 5. Get Current User Profile (Database Hydrated)
 
 Fetches the complete, fresh user profile directly from PostgreSQL. This is the primary endpoint frontend apps use to populate user state on page load or refresh.
 
@@ -1403,6 +1403,424 @@ curl -X POST http://localhost:3000/api/auth/reset-password \
   "message": "Password reset successfully"
 }
 ```
+
+---
+
+### 6.3 Series Catalog Management
+
+#### 13. Create Franchise Series
+Creates a new franchise series root (Admin only).
+
+- **Endpoint**: `POST /api/series`
+- **Access**: Protected (`Roles: ADMIN, SUPER_ADMIN`)
+- **HTTP Status**: `201 Created`
+
+##### cURL Request
+```bash
+curl -X POST http://localhost:3000/api/series \
+  -H "Authorization: Bearer <adminAccessToken>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "One Piece",
+    "slug": "one-piece",
+    "description": "The epic voyage of Monkey D. Luffy and the Straw Hat Pirates across the Grand Line.",
+    "status": "PUBLISHED"
+  }'
+```
+
+##### JSON Response (`201 Created`)
+```json
+{
+  "id": "a0000000-0000-0000-0000-000000000001",
+  "name": "One Piece",
+  "slug": "one-piece",
+  "description": "The epic voyage of Monkey D. Luffy and the Straw Hat Pirates across the Grand Line.",
+  "status": "PUBLISHED",
+  "createdAt": "2026-09-20T00:00:00.000Z",
+  "updatedAt": "2026-09-20T00:00:00.000Z"
+}
+```
+
+---
+
+#### 14. List Franchise Series
+Retrieves a paginated list of series with search, status filtering, and visibility scoping. Public users only receive published series.
+
+- **Endpoint**: `GET /api/series`
+- **Access**: Public / Authenticated
+- **HTTP Status**: `200 OK`
+- **Query Parameters**:
+  - `search` *(optional)*: Fuzzy search by series name or description.
+  - `status` *(optional, Admin only)*: `DRAFT | ONGOING | COMPLETED | HIATUS | PUBLISHED | ARCHIVED`.
+  - `page` *(optional, default: 1)*: Page number.
+  - `limit` *(optional, default: 20, max: 100)*: Items per page.
+  - `sortBy` *(optional, default: 'createdAt')*: `createdAt | name | status`.
+  - `sortOrder` *(optional, default: 'DESC')*: `ASC | DESC`.
+
+##### cURL Request
+```bash
+curl -X GET "http://localhost:3000/api/series?search=Piece&page=1&limit=20"
+```
+
+##### JSON Response (`200 OK`)
+```json
+{
+  "data": [
+    {
+      "id": "a0000000-0000-0000-0000-000000000001",
+      "name": "One Piece",
+      "slug": "one-piece",
+      "description": "The epic voyage of Monkey D. Luffy...",
+      "status": "PUBLISHED",
+      "createdAt": "2026-09-20T00:00:00.000Z",
+      "updatedAt": "2026-09-20T00:00:00.000Z"
+    }
+  ],
+  "meta": {
+    "total": 1,
+    "page": 1,
+    "limit": 20,
+    "totalPages": 1,
+    "hasNextPage": false,
+    "hasPrevPage": false
+  }
+}
+```
+
+---
+
+#### 15. Get Series by UUID or Slug
+Fetches a single series with joined volume, book, and media asset relations.
+
+- **Endpoint**: `GET /api/series/:id`
+- **Access**: Public / Authenticated
+- **HTTP Status**: `200 OK`
+- **Parameters**: `id` can be a UUID (`a000...`) or URL slug (`one-piece`).
+
+##### cURL Request
+```bash
+curl -X GET http://localhost:3000/api/series/one-piece
+```
+
+---
+
+#### 16. Update Series
+Updates series metadata, slug, or status (Admin only).
+
+- **Endpoint**: `PATCH /api/series/:id`
+- **Access**: Protected (`Roles: ADMIN, SUPER_ADMIN`)
+- **HTTP Status**: `200 OK`
+
+---
+
+#### 17. Delete Series
+Soft-deletes a series by setting `deleted_at` timestamp (Admin only).
+
+- **Endpoint**: `DELETE /api/series/:id`
+- **Access**: Protected (`Roles: ADMIN, SUPER_ADMIN`)
+- **HTTP Status**: `200 OK`
+
+---
+
+### 6.4 Volume Catalog Management
+
+#### 18. Create Volume in Series
+Creates a new volume grouping within a parent franchise series (Admin only).
+
+- **Endpoint**: `POST /api/volumes`
+- **Access**: Protected (`Roles: ADMIN, SUPER_ADMIN`)
+- **HTTP Status**: `201 Created`
+
+##### cURL Request
+```bash
+curl -X POST http://localhost:3000/api/volumes \
+  -H "Authorization: Bearer <adminAccessToken>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "seriesId": "a0000000-0000-0000-0000-000000000001",
+    "volumeNumber": 1,
+    "title": "Romance Dawn",
+    "description": "Luffy begins his journey to find the legendary One Piece treasure.",
+    "sortOrder": 10,
+    "status": "PUBLISHED"
+  }'
+```
+
+##### JSON Response (`201 Created`)
+```json
+{
+  "id": "b0000000-0000-0000-0000-000000000001",
+  "seriesId": "a0000000-0000-0000-0000-000000000001",
+  "volumeNumber": 1.0,
+  "title": "Romance Dawn",
+  "slug": "one-piece-vol-1",
+  "description": "Luffy begins his journey to find the legendary One Piece treasure.",
+  "sortOrder": 10,
+  "status": "PUBLISHED",
+  "createdAt": "2026-09-20T00:00:00.000Z",
+  "updatedAt": "2026-09-20T00:00:00.000Z"
+}
+```
+
+---
+
+#### 19. List Volumes
+Lists volumes with optional `seriesId` filtering, title search, pagination, and visibility scoping.
+
+- **Endpoint**: `GET /api/volumes`
+- **Access**: Public / Authenticated
+- **HTTP Status**: `200 OK`
+- **Query Parameters**:
+  - `seriesId` *(optional)*: Filter by parent series UUID.
+  - `search` *(optional)*: Fuzzy search by volume title or description.
+  - `status` *(optional, Admin only)*: `DRAFT | PUBLISHED | ARCHIVED`.
+  - `page` *(optional, default: 1)*: Page number.
+  - `limit` *(optional, default: 20, max: 100)*: Volumes per page.
+  - `sortBy` *(optional, default: 'sortOrder')*: `volumeNumber | sortOrder | createdAt | title`.
+  - `sortOrder` *(optional, default: 'ASC')*: `ASC | DESC`.
+
+---
+
+#### 20. Get Volume by UUID or Slug
+Fetches a single volume with joined series, book, and media asset relations.
+
+- **Endpoint**: `GET /api/volumes/:id`
+- **Access**: Public / Authenticated
+- **HTTP Status**: `200 OK`
+
+---
+
+#### 21. Update Volume
+Updates volume metadata or publishing status (Admin only).
+
+- **Endpoint**: `PATCH /api/volumes/:id`
+- **Access**: Protected (`Roles: ADMIN, SUPER_ADMIN`)
+- **HTTP Status**: `200 OK`
+
+---
+
+#### 22. Delete Volume
+Soft-deletes a volume by setting `deleted_at` timestamp (Admin only).
+
+- **Endpoint**: `DELETE /api/volumes/:id`
+- **Access**: Protected (`Roles: ADMIN, SUPER_ADMIN`)
+- **HTTP Status**: `200 OK`
+
+---
+
+### 6.5 Book Catalog Management
+
+#### 23. Create Book
+Creates a new digital edition/book with relational links to Series, Volume, Language, Category, Authors, Artists, Genres, and Tags (Admin only).
+
+- **Endpoint**: `POST /api/books`
+- **Access**: Protected (`Roles: ADMIN, SUPER_ADMIN`)
+- **HTTP Status**: `201 Created`
+
+##### cURL Request
+```bash
+curl -X POST http://localhost:3000/api/books \
+  -H "Authorization: Bearer <adminAccessToken>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "seriesId": "a0000000-0000-0000-0000-000000000001",
+    "volumeId": "b0000000-0000-0000-0000-000000000001",
+    "title": "One Piece, Vol. 1: Romance Dawn",
+    "japaneseTitle": "ONE PIECE 1 ROMANCE DAWN —冒険の夜明け—",
+    "languageId": "e0000000-0000-0000-0000-000000000001",
+    "categoryId": "f0000000-0000-0000-0000-000000000001",
+    "genreIds": ["g0000000-0000-0000-0000-000000000001"],
+    "tagIds": ["t0000000-0000-0000-0000-000000000001"],
+    "pricingModel": "FREE",
+    "status": "PUBLISHED"
+  }'
+```
+
+##### JSON Response (`201 Created`)
+```json
+{
+  "id": "e0000000-0000-0000-0000-000000000001",
+  "seriesId": "a0000000-0000-0000-0000-000000000001",
+  "volumeId": "b0000000-0000-0000-0000-000000000001",
+  "title": "One Piece, Vol. 1: Romance Dawn",
+  "japaneseTitle": "ONE PIECE 1 ROMANCE DAWN —冒険の夜明け—",
+  "slug": "one-piece-vol-1-romance-dawn",
+  "status": "PUBLISHED",
+  "pricingModel": "FREE",
+  "totalChapters": 0,
+  "totalPages": 0,
+  "createdAt": "2026-09-20T00:00:00.000Z",
+  "updatedAt": "2026-09-20T00:00:00.000Z"
+}
+```
+
+---
+
+#### 24. List Books
+Lists books with comprehensive relational filtering (`seriesId`, `volumeId`, `languageId`, `categoryId`, `authorId`, `artistId`, `genreId`, `tagId`, `pricingModel`, `isPremium`), search, sorting, and pagination.
+
+- **Endpoint**: `GET /api/books`
+- **Access**: Public / Authenticated
+- **HTTP Status**: `200 OK`
+
+---
+
+#### 25. Get Book by UUID or Slug
+Fetches a single book with joined relational details including series, volume, language, category, author, artist, genres, and tags.
+
+- **Endpoint**: `GET /api/books/:id`
+- **Access**: Public / Authenticated
+- **HTTP Status**: `200 OK`
+
+---
+
+#### 26. Update Book
+Updates book metadata, pricing model, publication status, or relational associations (Admin only).
+
+- **Endpoint**: `PATCH /api/books/:id`
+- **Access**: Protected (`Roles: ADMIN, SUPER_ADMIN`)
+- **HTTP Status**: `200 OK`
+
+---
+
+#### 27. Delete Book
+Soft-deletes a book by setting `deleted_at` timestamp (Admin only).
+
+- **Endpoint**: `DELETE /api/books/:id`
+- **Access**: Protected (`Roles: ADMIN, SUPER_ADMIN`)
+- **HTTP Status**: `200 OK`
+
+---
+
+### 6.6 Chapter Catalog Management
+
+#### 28. Create Chapter
+Creates a new chapter for a book with monetization pricing model, sort order, and page metadata (Admin only).
+
+- **Endpoint**: `POST /api/chapters`
+- **Access**: Protected (`Roles: ADMIN, SUPER_ADMIN`)
+- **HTTP Status**: `201 Created`
+- **Monetization Pricing Rules**:
+  - `FREE`: Unlocked for all readers. `freePageCount` and `coinCost` default to 0.
+  - `PARTIAL_FREE`: Requires `freePageCount > 0` (e.g. first 3 pages previewable for free).
+  - `PAID`: Requires `coinCost > 0` (e.g. 50 coins to unlock chapter).
+
+##### cURL Request
+```bash
+curl -X POST http://localhost:3000/api/chapters \
+  -H "Authorization: Bearer <adminAccessToken>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "bookId": "e0000000-0000-0000-0000-000000000001",
+    "chapterNumber": 1,
+    "title": "Romance Dawn — Dawn of the Adventure",
+    "sortOrder": 10,
+    "pricingModel": "FREE",
+    "pageCount": 24,
+    "published": true
+  }'
+```
+
+##### JSON Response (`201 Created`)
+```json
+{
+  "id": "c0000000-0000-0000-0000-000000000001",
+  "bookId": "e0000000-0000-0000-0000-000000000001",
+  "chapterNumber": 1.0,
+  "title": "Romance Dawn — Dawn of the Adventure",
+  "sortOrder": 10,
+  "pricingModel": "FREE",
+  "freePageCount": 0,
+  "coinCost": 0,
+  "pageCount": 24,
+  "published": true,
+  "publishedAt": "2026-09-20T00:00:00.000Z",
+  "createdAt": "2026-09-20T00:00:00.000Z",
+  "updatedAt": "2026-09-20T00:00:00.000Z"
+}
+```
+
+---
+
+#### 29. List Chapters
+Retrieves a paginated list of chapters ordered by `sortOrder ASC`. Public users strictly receive `published: true` chapters.
+
+- **Endpoint**: `GET /api/chapters`
+- **Access**: Public / Authenticated
+- **HTTP Status**: `200 OK`
+- **Query Parameters**:
+  - `bookId` *(optional)*: Filter chapters by parent book UUID.
+  - `pricingModel` *(optional)*: `FREE | PARTIAL_FREE | PAID`.
+  - `published` *(optional, Admin only)*: `true | false`.
+  - `search` *(optional)*: Fuzzy search by chapter title.
+  - `page` *(optional, default: 1)*: Page number.
+  - `limit` *(optional, default: 20, max: 100)*: Chapters per page.
+  - `sortBy` *(optional, default: 'sortOrder')*: `chapterNumber | sortOrder | createdAt | title`.
+  - `sortOrder` *(optional, default: 'ASC')*: `ASC | DESC`.
+
+##### cURL Request
+```bash
+curl -X GET "http://localhost:3000/api/chapters?bookId=e0000000-0000-0000-0000-000000000001&page=1&limit=20"
+```
+
+##### JSON Response (`200 OK`)
+```json
+{
+  "data": [
+    {
+      "id": "c0000000-0000-0000-0000-000000000001",
+      "bookId": "e0000000-0000-0000-0000-000000000001",
+      "chapterNumber": 1.0,
+      "title": "Romance Dawn — Dawn of the Adventure",
+      "sortOrder": 10,
+      "pricingModel": "FREE",
+      "freePageCount": 0,
+      "coinCost": 0,
+      "pageCount": 24,
+      "published": true,
+      "publishedAt": "2026-09-20T00:00:00.000Z",
+      "createdAt": "2026-09-20T00:00:00.000Z",
+      "updatedAt": "2026-09-20T00:00:00.000Z"
+    }
+  ],
+  "meta": {
+    "total": 1,
+    "page": 1,
+    "limit": 20,
+    "totalPages": 1,
+    "hasNextPage": false,
+    "hasPrevPage": false
+  }
+}
+```
+
+---
+
+#### 30. Get Chapter by ID
+Fetches a single chapter by UUID with joined parent book relation.
+
+- **Endpoint**: `GET /api/chapters/:id`
+- **Access**: Public / Authenticated
+- **HTTP Status**: `200 OK`
+
+---
+
+#### 31. Update Chapter
+Updates chapter details, pricing model, coin cost, or publication status (Admin only).
+
+- **Endpoint**: `PATCH /api/chapters/:id`
+- **Access**: Protected (`Roles: ADMIN, SUPER_ADMIN`)
+- **HTTP Status**: `200 OK`
+
+---
+
+#### 32. Delete Chapter
+Soft-deletes a chapter by setting `deleted_at` timestamp and automatically syncs the book's `totalChapters` counter (Admin only).
+
+- **Endpoint**: `DELETE /api/chapters/:id`
+- **Access**: Protected (`Roles: ADMIN, SUPER_ADMIN`)
+- **HTTP Status**: `200 OK`
+
 
 ---
 
