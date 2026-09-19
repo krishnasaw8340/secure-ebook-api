@@ -10,6 +10,8 @@ import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { Public } from './decorators/public.decorator';
 import { CurrentUser } from './decorators/current-user.decorator';
+import { DeviceInfo } from './decorators/device-info.decorator';
+import type { DeviceMetadata } from './interfaces/device-metadata.interface';
 import type { JwtUser } from './interfaces/jwt-user.interface';
 
 @ApiTags('Authentication')
@@ -79,8 +81,11 @@ export class AuthController {
     })
     @ApiResponse({ status: 400, description: 'Validation failed.' })
     @ApiResponse({ status: 401, description: 'Invalid credentials or unverified email.' })
-    async login(@Body() loginDto: LoginDto): Promise<AuthResponseDto> {
-        return this.authService.login(loginDto);
+    async login(
+        @Body() loginDto: LoginDto,
+        @DeviceInfo() deviceInfo: DeviceMetadata,
+    ): Promise<AuthResponseDto> {
+        return this.authService.login(loginDto, deviceInfo);
     }
 
     @Post('refresh')
@@ -89,8 +94,14 @@ export class AuthController {
     @ApiOperation({ summary: 'Refresh access token using a valid refresh token' })
     @ApiResponse({ status: 200, description: 'Access token refreshed successfully.' })
     @ApiResponse({ status: 401, description: 'Invalid or expired refresh token.' })
-    async refresh(@Body() dto: RefreshTokenDto) {
-        return this.authService.refresh(dto.refreshToken);
+    async refresh(
+        @Body() dto: RefreshTokenDto,
+        @DeviceInfo() deviceInfo: DeviceMetadata,
+    ) {
+        return this.authService.refresh(dto.refreshToken, {
+            ...deviceInfo,
+            deviceName: dto.deviceName || deviceInfo.deviceName,
+        });
     }
 
     @Post('logout')

@@ -1,5 +1,5 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsString } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsNotEmpty, IsOptional, IsString } from 'class-validator';
 
 export class RefreshTokenDto {
     @ApiProperty({
@@ -9,4 +9,10 @@ export class RefreshTokenDto {
     @IsString()
     @IsNotEmpty()
     refreshToken: string;
+
+    @ApiPropertyOptional({ example: 'Chrome on macOS', description: 'Optional custom device name' })
+    @IsString()
+    @IsOptional()
+    deviceName?: string;
 }
+

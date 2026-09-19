@@ -10,6 +10,7 @@ import { AuthResponseDto } from './dto/auth-response.dto';
 import { RoleType } from '../common/enums/role.enum';
 import { JwtPayload } from './interfaces/jwt-payload.interface';
 import { OtpPurpose } from '../common/enums/otp-purpose.enum';
+import { DeviceMetadata } from './interfaces/device-metadata.interface';
 
 @Injectable()
 export class AuthService {
@@ -116,7 +117,7 @@ export class AuthService {
         };
     }
 
-    async login(dto: LoginDto): Promise<AuthResponseDto> {
+    async login(dto: LoginDto, metadata?: DeviceMetadata): Promise<AuthResponseDto> {
         // Step 1: Find user by email
         const user = await this.usersService.findByEmail(dto.email, true, true);
         if (!user) {
@@ -153,8 +154,15 @@ export class AuthService {
         const accessToken = await this.tokenService.generateAccessToken(accessPayload);
         const refreshToken = await this.tokenService.generateRefreshToken(refreshPayload);
 
-        // Step 6: Save Refresh Token (Hashed)
-        await this.refreshTokenService.save(user.id, refreshToken);
+        // Step 6: Save Refresh Token (Hashed) with device info
+        const deviceName = dto.deviceName || metadata?.deviceName;
+        await this.refreshTokenService.save(
+            user.id,
+            refreshToken,
+            deviceName,
+            metadata?.ipAddress,
+            metadata?.userAgent,
+        );
 
         // Step 7: Return Response
         const { password, ...userWithoutPassword } = user;
@@ -166,7 +174,7 @@ export class AuthService {
         };
     }
 
-    async refresh(refreshToken: string): Promise<{ accessToken: string; refreshToken: string }> {
+    async refresh(refreshToken: string, metadata?: DeviceMetadata): Promise<{ accessToken: string; refreshToken: string }> {
         // 1. Verify JWT
         let payload: JwtPayload;
         try {
@@ -212,8 +220,18 @@ export class AuthService {
         const accessToken = await this.tokenService.generateAccessToken(accessPayload);
         const newRefreshToken = await this.tokenService.generateRefreshToken(refreshPayload);
 
-        // 7. Store new refresh token (hashed)
-        await this.refreshTokenService.save(payload.sub, newRefreshToken);
+        // 7. Store new refresh token (hashed) with device metadata
+        const deviceName = metadata?.deviceName || storedToken.deviceName;
+        const ipAddress = metadata?.ipAddress || storedToken.ipAddress;
+        const userAgent = metadata?.userAgent || storedToken.userAgent;
+
+        await this.refreshTokenService.save(
+            payload.sub,
+            newRefreshToken,
+            deviceName,
+            ipAddress,
+            userAgent,
+        );
 
         // 8. Return both new access token and rotated refresh token
         return {
