@@ -5,7 +5,11 @@ import {
   HttpCode,
   HttpStatus,
   Get,
+  Req,
+  Res,
+  UnauthorizedException,
 } from '@nestjs/common';
+import type { Request, Response } from 'express';
 import {
   ApiTags,
   ApiOperation,
@@ -118,8 +122,22 @@ export class AuthController {
   async login(
     @Body() loginDto: LoginDto,
     @DeviceInfo() deviceInfo: DeviceMetadata,
-  ): Promise<AuthResponseDto> {
-    return this.authService.login(loginDto, deviceInfo);
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<Omit<AuthResponseDto, 'refreshToken'>> {
+    const result = await this.authService.login(loginDto, deviceInfo);
+
+    // Set refresh token as HttpOnly cookie — inaccessible to JavaScript
+    res.cookie('refresh_token', result.refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days in ms
+      path: '/api/auth',
+    });
+
+    // Return only accessToken + user in body (refresh token is in cookie)
+    const { refreshToken: _rt, ...safeResponse } = result;
+    return safeResponse;
   }
 
   @Post('refresh')
@@ -135,13 +153,28 @@ export class AuthController {
     description: 'Invalid or expired refresh token.',
   })
   async refresh(
-    @Body() dto: RefreshTokenDto,
+    @Req() req: Request,
     @DeviceInfo() deviceInfo: DeviceMetadata,
-  ) {
-    return this.authService.refresh(dto.refreshToken, {
-      ...deviceInfo,
-      deviceName: dto.deviceName || deviceInfo.deviceName,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<{ accessToken: string }> {
+    const refreshToken: string | undefined = req.cookies?.refresh_token;
+
+    if (!refreshToken) {
+      throw new UnauthorizedException('No refresh token provided');
+    }
+
+    const result = await this.authService.refresh(refreshToken, deviceInfo);
+
+    // Rotate cookie — replace old token with newly issued one
+    res.cookie('refresh_token', result.refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 30 * 24 * 60 * 60 * 1000,
+      path: '/api/auth',
     });
+
+    return { accessToken: result.accessToken };
   }
 
   @Post('logout')
@@ -155,9 +188,18 @@ export class AuthController {
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
   async logout(
     @CurrentUser() user: JwtUser,
-    @Body() dto: RefreshTokenDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
   ): Promise<void> {
-    await this.authService.logout(user.userId, dto.refreshToken);
+    const refreshToken: string | undefined = req.cookies?.refresh_token;
+
+    if (refreshToken) {
+      // Revoke the specific session token in the database
+      await this.authService.logout(user.userId, refreshToken);
+    }
+
+    // Always clear the cookie regardless of whether the token existed
+    res.clearCookie('refresh_token', { path: '/api/auth' });
   }
 
   @Post('logout-all')

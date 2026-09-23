@@ -36,7 +36,7 @@ export class AuthResponseDto {
   @ApiProperty()
   accessToken: string;
 
-  @ApiProperty()
+  // Internal only — set as HttpOnly cookie by controller, never sent in response body
   refreshToken: string;
 }
 

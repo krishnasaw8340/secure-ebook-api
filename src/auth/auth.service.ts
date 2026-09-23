@@ -15,6 +15,7 @@ import { LoginDto, RegisterDto } from './dto/register.dto';
 import { AuthResponseDto } from './dto/auth-response.dto';
 import { JwtPayload } from './interfaces/jwt-payload.interface';
 import { OtpPurpose } from '../common/enums/otp-purpose.enum';
+import { RoleType } from '../common/enums/role.enum';
 import { DeviceMetadata } from './interfaces/device-metadata.interface';
 
 @Injectable()
@@ -54,8 +55,8 @@ export class AuthService {
       password: hashedPassword,
     });
 
-    // Step 4: Assign Default Role
-    await this.usersService.assignRole(user.id, dto.roleType);
+    // Step 4: Assign USER role — public registration never grants elevated privileges
+    await this.usersService.assignRole(user.id, RoleType.USER);
 
     // Step 5: Generate & Store Hashed OTP
     const otp = await this.otpService.generateAndSaveOtp(

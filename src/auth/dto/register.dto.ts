@@ -1,13 +1,11 @@
 import {
   IsEmail,
-  IsEnum,
   IsNotEmpty,
   IsOptional,
   IsString,
   MinLength,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { RoleType } from '../../common/enums/role.enum';
 
 export class RegisterDto {
   @ApiProperty({
@@ -23,10 +21,8 @@ export class RegisterDto {
   @IsNotEmpty()
   username: string;
 
-  @ApiProperty({ example: 'USER', description: 'User Role' })
-  @IsEnum(RoleType)
-  @IsNotEmpty()
-  roleType: RoleType;
+  // roleType intentionally removed — public registration always assigns USER role
+  // Admin/SuperAdmin roles must be granted by an existing SUPER_ADMIN post-registration
 
   @ApiProperty({ example: 'John Doe', description: 'Full name' })
   @IsString()
