@@ -10,6 +10,8 @@ import { BooksController } from './controllers/books.controller';
 import { BooksService } from './services/books.service';
 import { ChaptersController } from './controllers/chapters.controller';
 import { ChaptersService } from './services/chapters.service';
+import { PagesController } from './controllers/pages.controller';
+import { PagesService } from './services/pages.service';
 import {
   BookSeries,
   Volume,
@@ -52,6 +54,7 @@ import {
     VolumesController,
     BooksController,
     ChaptersController,
+    PagesController,
   ],
   providers: [
     CatalogService,
@@ -59,6 +62,7 @@ import {
     VolumesService,
     BooksService,
     ChaptersService,
+    PagesService,
   ],
   exports: [
     TypeOrmModule,
@@ -67,6 +71,7 @@ import {
     VolumesService,
     BooksService,
     ChaptersService,
+    PagesService,
   ],
 })
 export class CatalogModule {}

@@ -68,6 +68,10 @@ async function bootstrap() {
       'Chapters',
       'Chapter reading items (CRUD, pricing models FREE/PARTIAL_FREE/PAID, sort ordering, visibility scoping)',
     )
+    .addTag(
+      'Pages',
+      'Page scan & image asset management (ordering, batch creation, visibility)',
+    )
     .build();
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('docs', app, document, {
