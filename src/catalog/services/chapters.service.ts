@@ -9,6 +9,7 @@ import { Repository } from 'typeorm';
 import { Chapter } from '../entities/chapter.entity';
 import { Book } from '../entities/book.entity';
 import { ChapterPricingModel } from '../../common/enums/chapter-pricing-model.enum';
+import { ChapterContentStatus } from '../../common/enums/chapter-content-status.enum';
 import { RoleType } from '../../common/enums/role.enum';
 import type { JwtUser } from '../../auth/interfaces/jwt-user.interface';
 import {
@@ -16,6 +17,9 @@ import {
   UpdateChapterDto,
   QueryChapterDto,
   PaginatedChapterResponseDto,
+  ChapterPdfUploadInitDto,
+  ChapterPdfUploadInitResponseDto,
+  ChapterPdfUploadCompleteDto,
 } from '../dto';
 
 @Injectable()
@@ -30,44 +34,31 @@ export class ChaptersService {
   private isAdminUser(user?: JwtUser): boolean {
     if (!user || !user.roles) return false;
     return user.roles.some(
-      (role) => role === RoleType.ADMIN || role === RoleType.SUPER_ADMIN,
+      (role) =>
+        role === (RoleType.ADMIN as string) ||
+        role === (RoleType.SUPER_ADMIN as string),
     );
   }
 
   private validatePricingModel(
     pricingModel: ChapterPricingModel,
-    freePageCount?: number,
     coinCost?: number,
-  ): { freePageCount: number; coinCost: number } {
-    if (pricingModel === ChapterPricingModel.PARTIAL_FREE) {
-      if (freePageCount === undefined || freePageCount === null || freePageCount <= 0) {
-        throw new BadRequestException(
-          'freePageCount is required and must be greater than 0 when pricingModel is PARTIAL_FREE',
-        );
-      }
-      return {
-        freePageCount,
-        coinCost: coinCost !== undefined && coinCost >= 0 ? coinCost : 0,
-      };
-    }
-
+    bookDefaultCoinCost = 0,
+  ): { coinCost: number } {
     if (pricingModel === ChapterPricingModel.PAID) {
-      if (coinCost === undefined || coinCost === null || coinCost <= 0) {
+      const effectiveCost =
+        coinCost !== undefined && coinCost > 0 ? coinCost : bookDefaultCoinCost;
+
+      if (effectiveCost <= 0) {
         throw new BadRequestException(
           'coinCost is required and must be greater than 0 when pricingModel is PAID',
         );
       }
-      return {
-        freePageCount: 0,
-        coinCost,
-      };
+      return { coinCost: effectiveCost };
     }
 
-    // Default: FREE -> coinCost is 0, freePageCount is 0
-    return {
-      freePageCount: 0,
-      coinCost: 0,
-    };
+    // Default: FREE -> coinCost is 0
+    return { coinCost: 0 };
   }
 
   private async updateBookChapterCount(bookId: string): Promise<void> {
@@ -106,12 +97,12 @@ export class ChaptersService {
       );
     }
 
-    // 3. Validate pricing model constraints
+    // 3. Validate pricing model constraints with Book default chapter price support
     const pricingModel = dto.pricingModel ?? ChapterPricingModel.FREE;
-    const { freePageCount, coinCost } = this.validatePricingModel(
+    const { coinCost } = this.validatePricingModel(
       pricingModel,
-      dto.freePageCount,
       dto.coinCost,
+      book.defaultChapterCoinCost,
     );
 
     // 4. Determine sortOrder (default: chapterNumber * 10)
@@ -129,15 +120,26 @@ export class ChaptersService {
       publishedAt = new Date();
     }
 
+    // 6. Resolve content status
+    const contentStatus =
+      dto.contentStatus ??
+      (dto.pdfStorageKey
+        ? ChapterContentStatus.READY
+        : ChapterContentStatus.PENDING);
+
     const chapter = this.chapterRepository.create({
       bookId: dto.bookId,
       chapterNumber: dto.chapterNumber,
       title: dto.title?.trim(),
       sortOrder,
       pricingModel,
-      freePageCount,
       coinCost,
-      pageCount: dto.pageCount ?? 0,
+      pdfStorageKey: dto.pdfStorageKey,
+      pdfFileName: dto.pdfFileName?.trim(),
+      pdfFileSize: dto.pdfFileSize,
+      pdfPageCount: dto.pdfPageCount,
+      pdfChecksum: dto.pdfChecksum,
+      contentStatus,
       published,
       publishedAt,
     });
@@ -146,8 +148,13 @@ export class ChaptersService {
       const savedChapter = await this.chapterRepository.save(chapter);
       await this.updateBookChapterCount(dto.bookId);
       return savedChapter;
-    } catch (error: any) {
-      if (error?.code === '23505') {
+    } catch (error: unknown) {
+      if (
+        typeof error === 'object' &&
+        error !== null &&
+        'code' in error &&
+        (error as { code: string }).code === '23505'
+      ) {
         throw new ConflictException(
           `Chapter ${dto.chapterNumber} already exists for book "${book.title}"`,
         );
@@ -285,8 +292,11 @@ export class ChaptersService {
     }
 
     // 1. If bookId changed, verify new Book exists
+    let book: Book | null = null;
+    const targetBookId = dto.bookId ?? chapter.bookId;
+
     if (dto.bookId && dto.bookId !== chapter.bookId) {
-      const book = await this.bookRepository.findOne({
+      book = await this.bookRepository.findOne({
         where: { id: dto.bookId },
       });
       if (!book) {
@@ -295,12 +305,12 @@ export class ChaptersService {
     }
 
     // 2. Check chapterNumber uniqueness if chapterNumber or bookId is being updated
-    const targetBookId = dto.bookId ?? chapter.bookId;
     const targetChapterNumber = dto.chapterNumber ?? chapter.chapterNumber;
 
     if (
       targetBookId !== chapter.bookId ||
-      (dto.chapterNumber !== undefined && dto.chapterNumber !== chapter.chapterNumber)
+      (dto.chapterNumber !== undefined &&
+        dto.chapterNumber !== chapter.chapterNumber)
     ) {
       const existing = await this.chapterRepository.findOne({
         where: {
@@ -318,27 +328,41 @@ export class ChaptersService {
 
     // 3. Resolve and validate pricing model
     const effectivePricingModel = dto.pricingModel ?? chapter.pricingModel;
-    const effectiveFreePageCount =
-      dto.freePageCount !== undefined ? dto.freePageCount : chapter.freePageCount;
     const effectiveCoinCost =
       dto.coinCost !== undefined ? dto.coinCost : chapter.coinCost;
 
-    const { freePageCount, coinCost } = this.validatePricingModel(
+    if (!book && effectivePricingModel === ChapterPricingModel.PAID) {
+      book = await this.bookRepository.findOne({
+        where: { id: targetBookId },
+      });
+    }
+
+    const { coinCost } = this.validatePricingModel(
       effectivePricingModel,
-      effectiveFreePageCount,
       effectiveCoinCost,
+      book?.defaultChapterCoinCost ?? 0,
     );
 
     const oldBookId = chapter.bookId;
 
     if (dto.bookId !== undefined) chapter.bookId = dto.bookId;
-    if (dto.chapterNumber !== undefined) chapter.chapterNumber = dto.chapterNumber;
+    if (dto.chapterNumber !== undefined)
+      chapter.chapterNumber = dto.chapterNumber;
     if (dto.title !== undefined) chapter.title = dto.title?.trim();
     if (dto.sortOrder !== undefined) chapter.sortOrder = dto.sortOrder;
     chapter.pricingModel = effectivePricingModel;
-    chapter.freePageCount = freePageCount;
     chapter.coinCost = coinCost;
-    if (dto.pageCount !== undefined) chapter.pageCount = dto.pageCount;
+
+    // PDF metadata updates
+    if (dto.pdfStorageKey !== undefined)
+      chapter.pdfStorageKey = dto.pdfStorageKey;
+    if (dto.pdfFileName !== undefined)
+      chapter.pdfFileName = dto.pdfFileName?.trim();
+    if (dto.pdfFileSize !== undefined) chapter.pdfFileSize = dto.pdfFileSize;
+    if (dto.pdfPageCount !== undefined) chapter.pdfPageCount = dto.pdfPageCount;
+    if (dto.pdfChecksum !== undefined) chapter.pdfChecksum = dto.pdfChecksum;
+    if (dto.contentStatus !== undefined)
+      chapter.contentStatus = dto.contentStatus;
 
     if (dto.published !== undefined) {
       chapter.published = dto.published;
@@ -348,7 +372,9 @@ export class ChaptersService {
     }
 
     if (dto.publishedAt !== undefined) {
-      chapter.publishedAt = dto.publishedAt ? new Date(dto.publishedAt) : undefined;
+      chapter.publishedAt = dto.publishedAt
+        ? new Date(dto.publishedAt)
+        : undefined;
     }
 
     try {
@@ -358,8 +384,13 @@ export class ChaptersService {
         await this.updateBookChapterCount(chapter.bookId);
       }
       return updated;
-    } catch (error: any) {
-      if (error?.code === '23505') {
+    } catch (error: unknown) {
+      if (
+        typeof error === 'object' &&
+        error !== null &&
+        'code' in error &&
+        (error as { code: string }).code === '23505'
+      ) {
         throw new ConflictException(
           `Chapter ${chapter.chapterNumber} already exists for target book`,
         );
@@ -389,5 +420,64 @@ export class ChaptersService {
       message: 'Chapter soft-deleted successfully',
       id,
     };
+  }
+
+  /**
+   * POST /chapters/:id/content/upload-init
+   * Prepares direct upload for chapter PDF asset
+   */
+  async initPdfUpload(
+    chapterId: string,
+    dto: ChapterPdfUploadInitDto,
+  ): Promise<ChapterPdfUploadInitResponseDto> {
+    const chapter = await this.chapterRepository.findOne({
+      where: { id: chapterId },
+    });
+
+    if (!chapter) {
+      throw new NotFoundException(`Chapter "${chapterId}" not found`);
+    }
+
+    // Deterministic storage key
+    const storageKey = `books/${chapter.bookId}/chapters/${chapter.id}/chapter.pdf`;
+
+    chapter.pdfStorageKey = storageKey;
+    chapter.pdfFileName = dto.fileName.trim();
+    chapter.pdfFileSize = dto.fileSize;
+    chapter.contentStatus = ChapterContentStatus.PENDING;
+
+    await this.chapterRepository.save(chapter);
+
+    return {
+      chapterId: chapter.id,
+      storageKey,
+      uploadUrl: `https://storage.kuroyomi.local/upload/${encodeURIComponent(storageKey)}?signature=mock_presigned_v1`,
+      expiresInSeconds: 3600,
+    };
+  }
+
+  /**
+   * POST /chapters/:id/content/complete
+   * Finalizes PDF metadata after direct browser upload to storage
+   */
+  async completePdfUpload(
+    chapterId: string,
+    dto: ChapterPdfUploadCompleteDto,
+  ): Promise<Chapter> {
+    const chapter = await this.chapterRepository.findOne({
+      where: { id: chapterId },
+    });
+
+    if (!chapter) {
+      throw new NotFoundException(`Chapter "${chapterId}" not found`);
+    }
+
+    chapter.pdfFileName = dto.fileName.trim();
+    chapter.pdfFileSize = dto.fileSize;
+    if (dto.pageCount !== undefined) chapter.pdfPageCount = dto.pageCount;
+    if (dto.checksum !== undefined) chapter.pdfChecksum = dto.checksum;
+    chapter.contentStatus = ChapterContentStatus.READY;
+
+    return this.chapterRepository.save(chapter);
   }
 }

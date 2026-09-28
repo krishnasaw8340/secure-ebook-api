@@ -2,8 +2,7 @@ import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { ValidationPipe } from '@nestjs/common';
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const cookieParser = require('cookie-parser');
+import cookieParser from 'cookie-parser';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -66,11 +65,11 @@ async function bootstrap() {
     )
     .addTag(
       'Chapters',
-      'Chapter reading items (CRUD, pricing models FREE/PARTIAL_FREE/PAID, sort ordering, visibility scoping)',
+      'Chapter reading items (CRUD, pricing models FREE/PAID, sort ordering, visibility scoping)',
     )
     .addTag(
-      'Pages',
-      'Page scan & image asset management (ordering, batch creation, visibility)',
+      'Admin Chapters',
+      'Administrative chapter content operations & PDF direct upload lifecycle',
     )
     .build();
   const document = SwaggerModule.createDocument(app, config);

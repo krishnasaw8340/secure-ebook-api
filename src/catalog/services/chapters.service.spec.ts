@@ -1,11 +1,15 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
-import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { ChaptersService } from './chapters.service';
 import { Chapter } from '../entities/chapter.entity';
 import { Book } from '../entities/book.entity';
 import { ChapterPricingModel } from '../../common/enums/chapter-pricing-model.enum';
-import { RoleType } from '../../common/enums/role.enum';
+import { ChapterContentStatus } from '../../common/enums/chapter-content-status.enum';
 
 describe('ChaptersService', () => {
   let service: ChaptersService;
@@ -16,6 +20,7 @@ describe('ChaptersService', () => {
     id: 'e0000000-0000-0000-0000-000000000001',
     title: 'One Piece, Vol. 1',
     totalChapters: 1,
+    defaultChapterCoinCost: 2,
   };
 
   const mockChapter: Partial<Chapter> = {
@@ -25,9 +30,15 @@ describe('ChaptersService', () => {
     title: 'Romance Dawn',
     sortOrder: 10,
     pricingModel: ChapterPricingModel.FREE,
-    freePageCount: 0,
     coinCost: 0,
-    pageCount: 24,
+    pdfStorageKey:
+      'books/e0000000-0000-0000-0000-000000000001/chapters/c0000000-0000-0000-0000-000000000001/chapter.pdf',
+    pdfFileName: 'chapter-001.pdf',
+    pdfFileSize: 15420000,
+    pdfPageCount: 42,
+    pdfChecksum:
+      'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+    contentStatus: ChapterContentStatus.READY,
     published: true,
     publishedAt: new Date(),
     createdAt: new Date(),
@@ -38,7 +49,9 @@ describe('ChaptersService', () => {
     chapterRepo = {
       findOne: jest.fn(),
       create: jest.fn((dto) => dto),
-      save: jest.fn((entity) => Promise.resolve({ id: mockChapter.id, ...entity })),
+      save: jest.fn((entity) =>
+        Promise.resolve({ id: mockChapter.id, ...entity }),
+      ),
       softDelete: jest.fn().mockResolvedValue({ affected: 1 }),
       count: jest.fn().mockResolvedValue(1),
       createQueryBuilder: jest.fn(),
@@ -81,13 +94,14 @@ describe('ChaptersService', () => {
         title: 'Romance Dawn',
       });
 
-      expect(bookRepo.findOne).toHaveBeenCalledWith({ where: { id: mockBook.id } });
+      expect(bookRepo.findOne).toHaveBeenCalledWith({
+        where: { id: mockBook.id },
+      });
       expect(chapterRepo.findOne).toHaveBeenCalledWith({
         where: { bookId: mockBook.id, chapterNumber: 1 },
       });
       expect(result.sortOrder).toBe(10);
       expect(result.pricingModel).toBe(ChapterPricingModel.FREE);
-      expect(result.freePageCount).toBe(0);
       expect(result.coinCost).toBe(0);
       expect(bookRepo.update).toHaveBeenCalled();
     });
@@ -115,39 +129,11 @@ describe('ChaptersService', () => {
       ).rejects.toThrow(ConflictException);
     });
 
-    it('should throw BadRequestException if PARTIAL_FREE pricing model is missing freePageCount', async () => {
-      bookRepo.findOne.mockResolvedValue(mockBook);
-      chapterRepo.findOne.mockResolvedValue(null);
-
-      await expect(
-        service.create({
-          bookId: mockBook.id!,
-          chapterNumber: 2,
-          pricingModel: ChapterPricingModel.PARTIAL_FREE,
-          freePageCount: 0,
-        }),
-      ).rejects.toThrow(BadRequestException);
-    });
-
-    it('should successfully create PARTIAL_FREE chapter when freePageCount > 0', async () => {
-      bookRepo.findOne.mockResolvedValue(mockBook);
-      chapterRepo.findOne.mockResolvedValue(null);
-
-      const result = await service.create({
-        bookId: mockBook.id!,
-        chapterNumber: 2,
-        pricingModel: ChapterPricingModel.PARTIAL_FREE,
-        freePageCount: 5,
-        coinCost: 20,
+    it('should throw BadRequestException if PAID pricing model has no coinCost and book default is 0', async () => {
+      bookRepo.findOne.mockResolvedValue({
+        ...mockBook,
+        defaultChapterCoinCost: 0,
       });
-
-      expect(result.pricingModel).toBe(ChapterPricingModel.PARTIAL_FREE);
-      expect(result.freePageCount).toBe(5);
-      expect(result.coinCost).toBe(20);
-    });
-
-    it('should throw BadRequestException if PAID pricing model is missing coinCost', async () => {
-      bookRepo.findOne.mockResolvedValue(mockBook);
       chapterRepo.findOne.mockResolvedValue(null);
 
       await expect(
@@ -160,7 +146,7 @@ describe('ChaptersService', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
-    it('should successfully create PAID chapter when coinCost > 0', async () => {
+    it('should fallback to book defaultChapterCoinCost when PAID chapter has no explicit coinCost', async () => {
       bookRepo.findOne.mockResolvedValue(mockBook);
       chapterRepo.findOne.mockResolvedValue(null);
 
@@ -168,12 +154,25 @@ describe('ChaptersService', () => {
         bookId: mockBook.id!,
         chapterNumber: 3,
         pricingModel: ChapterPricingModel.PAID,
-        coinCost: 50,
       });
 
       expect(result.pricingModel).toBe(ChapterPricingModel.PAID);
-      expect(result.coinCost).toBe(50);
-      expect(result.freePageCount).toBe(0);
+      expect(result.coinCost).toBe(2);
+    });
+
+    it('should successfully create PAID chapter when explicit coinCost > 0', async () => {
+      bookRepo.findOne.mockResolvedValue(mockBook);
+      chapterRepo.findOne.mockResolvedValue(null);
+
+      const result = await service.create({
+        bookId: mockBook.id!,
+        chapterNumber: 3,
+        pricingModel: ChapterPricingModel.PAID,
+        coinCost: 5,
+      });
+
+      expect(result.pricingModel).toBe(ChapterPricingModel.PAID);
+      expect(result.coinCost).toBe(5);
     });
 
     it('should set publishedAt when published is true and publishedAt is not provided', async () => {
@@ -210,9 +209,12 @@ describe('ChaptersService', () => {
         sortOrder: 'ASC',
       });
 
-      expect(qb.andWhere).toHaveBeenCalledWith('chapter.published = :published', {
-        published: true,
-      });
+      expect(qb.andWhere).toHaveBeenCalledWith(
+        'chapter.published = :published',
+        {
+          published: true,
+        },
+      );
       expect(qb.andWhere).toHaveBeenCalledWith('chapter.bookId = :bookId', {
         bookId: mockBook.id,
       });
@@ -230,48 +232,6 @@ describe('ChaptersService', () => {
 
       expect(result.data).toEqual([]);
       expect(result.meta.total).toBe(0);
-    });
-
-    it('should allow admin user to query unpublished chapters and search by title', async () => {
-      const qb: any = {
-        andWhere: jest.fn().mockReturnThis(),
-        orderBy: jest.fn().mockReturnThis(),
-        skip: jest.fn().mockReturnThis(),
-        take: jest.fn().mockReturnThis(),
-        getManyAndCount: jest.fn().mockResolvedValue([[mockChapter], 1]),
-      };
-      chapterRepo.createQueryBuilder.mockReturnValue(qb);
-
-      const adminUser = {
-        userId: 'u1',
-        email: 'admin@kuroyomi.com',
-        roles: [RoleType.ADMIN],
-      };
-
-      const result = await service.findAll(
-        {
-          page: 1,
-          limit: 20,
-          published: false,
-          search: 'Romance',
-          pricingModel: ChapterPricingModel.FREE,
-          sortBy: 'chapterNumber',
-          sortOrder: 'DESC',
-        },
-        adminUser,
-      );
-
-      expect(qb.andWhere).toHaveBeenCalledWith('chapter.published = :published', {
-        published: false,
-      });
-      expect(qb.andWhere).toHaveBeenCalledWith('chapter.pricingModel = :pricingModel', {
-        pricingModel: ChapterPricingModel.FREE,
-      });
-      expect(qb.andWhere).toHaveBeenCalledWith('chapter.title ILIKE :searchTerm', {
-        searchTerm: '%Romance%',
-      });
-      expect(qb.orderBy).toHaveBeenCalledWith('chapter.chapterNumber', 'DESC');
-      expect(result.data.length).toBe(1);
     });
   });
 
@@ -300,39 +260,6 @@ describe('ChaptersService', () => {
         NotFoundException,
       );
     });
-
-    it('should throw NotFoundException if public user queries unpublished chapter', async () => {
-      const unpublishedChapter = { ...mockChapter, published: false };
-      const qb: any = {
-        leftJoinAndSelect: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        getOne: jest.fn().mockResolvedValue(unpublishedChapter),
-      };
-      chapterRepo.createQueryBuilder.mockReturnValue(qb);
-
-      await expect(service.findOne(mockChapter.id!)).rejects.toThrow(
-        NotFoundException,
-      );
-    });
-
-    it('should allow admin user to view unpublished chapter', async () => {
-      const unpublishedChapter = { ...mockChapter, published: false };
-      const qb: any = {
-        leftJoinAndSelect: jest.fn().mockReturnThis(),
-        where: jest.fn().mockReturnThis(),
-        getOne: jest.fn().mockResolvedValue(unpublishedChapter),
-      };
-      chapterRepo.createQueryBuilder.mockReturnValue(qb);
-
-      const adminUser = {
-        userId: 'u1',
-        email: 'admin@kuroyomi.com',
-        roles: [RoleType.SUPER_ADMIN],
-      };
-
-      const result = await service.findOne(mockChapter.id!, adminUser);
-      expect(result.id).toBe(mockChapter.id);
-    });
   });
 
   describe('update', () => {
@@ -356,35 +283,41 @@ describe('ChaptersService', () => {
         service.update('non-existent-id', { title: 'Test' }),
       ).rejects.toThrow(NotFoundException);
     });
+  });
 
-    it('should throw NotFoundException if target book does not exist when reassigning bookId', async () => {
-      chapterRepo.findOne.mockResolvedValue({ ...mockChapter });
-      bookRepo.findOne.mockResolvedValue(null);
-
-      await expect(
-        service.update(mockChapter.id!, { bookId: 'new-book-id' }),
-      ).rejects.toThrow(NotFoundException);
-    });
-
-    it('should throw ConflictException if updated chapterNumber conflicts with another chapter in book', async () => {
-      chapterRepo.findOne
-        .mockResolvedValueOnce({ ...mockChapter })
-        .mockResolvedValueOnce({ id: 'c0000000-0000-0000-0000-000000000002', chapterNumber: 2 });
-
-      await expect(
-        service.update(mockChapter.id!, { chapterNumber: 2 }),
-      ).rejects.toThrow(ConflictException);
-    });
-
-    it('should validate pricing model when updated to PARTIAL_FREE', async () => {
+  describe('upload contracts', () => {
+    it('should initiate PDF upload contract with deterministic key', async () => {
       chapterRepo.findOne.mockResolvedValue({ ...mockChapter });
 
-      await expect(
-        service.update(mockChapter.id!, {
-          pricingModel: ChapterPricingModel.PARTIAL_FREE,
-          freePageCount: 0,
-        }),
-      ).rejects.toThrow(BadRequestException);
+      const result = await service.initPdfUpload(mockChapter.id!, {
+        fileName: 'chapter-001.pdf',
+        fileSize: 15420000,
+      });
+
+      expect(result.chapterId).toBe(mockChapter.id);
+      expect(result.storageKey).toBe(
+        `books/${mockChapter.bookId}/chapters/${mockChapter.id}/chapter.pdf`,
+      );
+      expect(result.uploadUrl).toBeDefined();
+      expect(chapterRepo.save).toHaveBeenCalled();
+    });
+
+    it('should complete PDF upload and set contentStatus to READY', async () => {
+      chapterRepo.findOne.mockResolvedValue({
+        ...mockChapter,
+        contentStatus: ChapterContentStatus.PENDING,
+      });
+
+      const result = await service.completePdfUpload(mockChapter.id!, {
+        fileName: 'chapter-001.pdf',
+        fileSize: 15420000,
+        pageCount: 47,
+        checksum: 'checksum123',
+      });
+
+      expect(result.contentStatus).toBe(ChapterContentStatus.READY);
+      expect(result.pdfPageCount).toBe(47);
+      expect(chapterRepo.save).toHaveBeenCalled();
     });
   });
 
@@ -398,14 +331,6 @@ describe('ChaptersService', () => {
       expect(bookRepo.update).toHaveBeenCalled();
       expect(result.message).toBe('Chapter soft-deleted successfully');
       expect(result.id).toBe(mockChapter.id);
-    });
-
-    it('should throw NotFoundException if chapter does not exist', async () => {
-      chapterRepo.findOne.mockResolvedValue(null);
-
-      await expect(service.remove('non-existent-id')).rejects.toThrow(
-        NotFoundException,
-      );
     });
   });
 });

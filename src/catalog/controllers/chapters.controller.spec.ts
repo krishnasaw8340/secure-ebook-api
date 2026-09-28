@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ChaptersController } from './chapters.controller';
 import { ChaptersService } from '../services/chapters.service';
 import { ChapterPricingModel } from '../../common/enums/chapter-pricing-model.enum';
+import { ChapterContentStatus } from '../../common/enums/chapter-content-status.enum';
 
 describe('ChaptersController', () => {
   let controller: ChaptersController;
@@ -14,9 +15,11 @@ describe('ChaptersController', () => {
     title: 'Romance Dawn',
     sortOrder: 10,
     pricingModel: ChapterPricingModel.FREE,
-    freePageCount: 0,
     coinCost: 0,
-    pageCount: 24,
+    pdfFileName: 'chapter-001.pdf',
+    pdfFileSize: 15420000,
+    pdfPageCount: 42,
+    contentStatus: ChapterContentStatus.READY,
     published: true,
   };
 
@@ -35,11 +38,20 @@ describe('ChaptersController', () => {
         },
       }),
       findOne: jest.fn().mockResolvedValue(mockChapter),
-      update: jest.fn().mockResolvedValue({ ...mockChapter, title: 'Updated Romance Dawn' }),
+      update: jest
+        .fn()
+        .mockResolvedValue({ ...mockChapter, title: 'Updated Romance Dawn' }),
       remove: jest.fn().mockResolvedValue({
         message: 'Chapter soft-deleted successfully',
         id: mockChapter.id,
       }),
+      initPdfUpload: jest.fn().mockResolvedValue({
+        chapterId: mockChapter.id,
+        storageKey: 'books/b1/chapters/c1/chapter.pdf',
+        uploadUrl: 'https://storage-mock/upload',
+        expiresInSeconds: 3600,
+      }),
+      completePdfUpload: jest.fn().mockResolvedValue(mockChapter),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -100,5 +112,23 @@ describe('ChaptersController', () => {
     const res = await controller.remove(mockChapter.id);
     expect(service.remove).toHaveBeenCalledWith(mockChapter.id);
     expect(res.id).toBe(mockChapter.id);
+  });
+
+  it('POST /chapters/:id/content/upload-init calls service.initPdfUpload', async () => {
+    const dto = { fileName: 'chapter-001.pdf', fileSize: 15420000 };
+    const res = await controller.initPdfUpload(mockChapter.id, dto);
+    expect(service.initPdfUpload).toHaveBeenCalledWith(mockChapter.id, dto);
+    expect(res.storageKey).toBeDefined();
+  });
+
+  it('POST /chapters/:id/content/complete calls service.completePdfUpload', async () => {
+    const dto = {
+      fileName: 'chapter-001.pdf',
+      fileSize: 15420000,
+      pageCount: 42,
+    };
+    const res = await controller.completePdfUpload(mockChapter.id, dto);
+    expect(service.completePdfUpload).toHaveBeenCalledWith(mockChapter.id, dto);
+    expect(res.contentStatus).toBe(ChapterContentStatus.READY);
   });
 });

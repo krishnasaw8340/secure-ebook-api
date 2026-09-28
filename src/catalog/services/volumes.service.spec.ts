@@ -34,7 +34,9 @@ describe('VolumesService', () => {
     volumeRepo = {
       findOne: jest.fn(),
       create: jest.fn((dto) => dto),
-      save: jest.fn((entity) => Promise.resolve({ id: mockVolume.id, ...entity })),
+      save: jest.fn((entity) =>
+        Promise.resolve({ id: mockVolume.id, ...entity }),
+      ),
       softDelete: jest.fn().mockResolvedValue({ affected: 1 }),
       createQueryBuilder: jest.fn(),
     };
@@ -75,7 +77,9 @@ describe('VolumesService', () => {
         title: 'Romance Dawn',
       });
 
-      expect(seriesRepo.findOne).toHaveBeenCalledWith({ where: { id: mockSeries.id } });
+      expect(seriesRepo.findOne).toHaveBeenCalledWith({
+        where: { id: mockSeries.id },
+      });
       expect(volumeRepo.findOne).toHaveBeenCalledWith({
         where: { seriesId: mockSeries.id, volumeNumber: 1 },
       });
@@ -107,7 +111,11 @@ describe('VolumesService', () => {
     });
 
     it('should allow same volumeNumber in different series', async () => {
-      const narutoSeries = { id: 'a0000000-0000-0000-0000-000000000002', name: 'Naruto', slug: 'naruto' };
+      const narutoSeries = {
+        id: 'a0000000-0000-0000-0000-000000000002',
+        name: 'Naruto',
+        slug: 'naruto',
+      };
       seriesRepo.findOne.mockResolvedValue(narutoSeries);
       volumeRepo.findOne.mockResolvedValue(null);
 
@@ -187,7 +195,11 @@ describe('VolumesService', () => {
       };
       volumeRepo.createQueryBuilder.mockReturnValue(qb);
 
-      const adminUser = { userId: 'u1', email: 'admin@kuroyomi.com', roles: [RoleType.ADMIN] };
+      const adminUser = {
+        userId: 'u1',
+        email: 'admin@kuroyomi.com',
+        roles: [RoleType.ADMIN],
+      };
       const result = await service.findAll(
         {
           page: 1,
@@ -229,7 +241,9 @@ describe('VolumesService', () => {
       };
       volumeRepo.createQueryBuilder.mockReturnValue(qb);
 
-      await expect(service.findOne('one-piece-vol-1')).rejects.toThrow(NotFoundException);
+      await expect(service.findOne('one-piece-vol-1')).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('should allow ADMIN to view DRAFT volume', async () => {
@@ -241,7 +255,11 @@ describe('VolumesService', () => {
       };
       volumeRepo.createQueryBuilder.mockReturnValue(qb);
 
-      const adminUser = { userId: 'u1', email: 'admin@kuroyomi.com', roles: [RoleType.ADMIN] };
+      const adminUser = {
+        userId: 'u1',
+        email: 'admin@kuroyomi.com',
+        roles: [RoleType.ADMIN],
+      };
       const result = await service.findOne('one-piece-vol-1', adminUser);
       expect(result.status).toBe(VolumeStatus.DRAFT);
     });

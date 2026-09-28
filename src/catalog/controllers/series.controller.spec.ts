@@ -2,7 +2,6 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { SeriesController } from './series.controller';
 import { SeriesService } from '../services/series.service';
 import { SeriesStatus } from '../../common/enums/series-status.enum';
-import { RoleType } from '../../common/enums/role.enum';
 
 describe('SeriesController', () => {
   let controller: SeriesController;
@@ -18,10 +17,25 @@ describe('SeriesController', () => {
   beforeEach(async () => {
     service = {
       create: jest.fn().mockResolvedValue(mockSeries),
-      findAll: jest.fn().mockResolvedValue({ data: [mockSeries], meta: { total: 1, page: 1, limit: 20, totalPages: 1, hasNextPage: false, hasPrevPage: false } }),
+      findAll: jest.fn().mockResolvedValue({
+        data: [mockSeries],
+        meta: {
+          total: 1,
+          page: 1,
+          limit: 20,
+          totalPages: 1,
+          hasNextPage: false,
+          hasPrevPage: false,
+        },
+      }),
       findOne: jest.fn().mockResolvedValue(mockSeries),
-      update: jest.fn().mockResolvedValue({ ...mockSeries, name: 'Updated One Piece' }),
-      remove: jest.fn().mockResolvedValue({ message: 'Series deleted successfully', id: mockSeries.id }),
+      update: jest
+        .fn()
+        .mockResolvedValue({ ...mockSeries, name: 'Updated One Piece' }),
+      remove: jest.fn().mockResolvedValue({
+        message: 'Series deleted successfully',
+        id: mockSeries.id,
+      }),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -49,7 +63,12 @@ describe('SeriesController', () => {
   });
 
   it('GET /series calls service.findAll', async () => {
-    const res = await controller.findAll({ page: 1, limit: 20, sortBy: 'createdAt', sortOrder: 'DESC' });
+    const res = await controller.findAll({
+      page: 1,
+      limit: 20,
+      sortBy: 'createdAt',
+      sortOrder: 'DESC',
+    });
     expect(service.findAll).toHaveBeenCalled();
     expect(res.data.length).toBe(1);
   });

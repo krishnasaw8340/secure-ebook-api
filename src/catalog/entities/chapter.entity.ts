@@ -9,8 +9,9 @@ import {
 } from 'typeorm';
 import { BaseEntity } from '../../common/entities/base.entity';
 import { ChapterPricingModel } from '../../common/enums/chapter-pricing-model.enum';
+import { ChapterContentStatus } from '../../common/enums/chapter-content-status.enum';
 import { Book } from './book.entity';
-import { Page } from './page.entity';
+import { ChapterUnlock } from './chapter-unlock.entity';
 
 @Entity({
   schema: 'catalog',
@@ -42,7 +43,8 @@ export class Chapter extends BaseEntity {
     scale: 2,
     transformer: {
       to: (value: number) => value,
-      from: (value: string) => (value !== null && value !== undefined ? parseFloat(value) : value),
+      from: (value: string) =>
+        value !== null && value !== undefined ? parseFloat(value) : value,
     },
   })
   chapterNumber: number;
@@ -70,13 +72,6 @@ export class Chapter extends BaseEntity {
   pricingModel: ChapterPricingModel;
 
   @Column({
-    name: 'free_page_count',
-    type: 'integer',
-    default: 0,
-  })
-  freePageCount: number;
-
-  @Column({
     name: 'coin_cost',
     type: 'integer',
     default: 0,
@@ -84,11 +79,57 @@ export class Chapter extends BaseEntity {
   coinCost: number;
 
   @Column({
-    name: 'page_count',
-    type: 'integer',
-    default: 0,
+    name: 'pdf_storage_key',
+    type: 'varchar',
+    length: 500,
+    nullable: true,
   })
-  pageCount: number;
+  pdfStorageKey?: string;
+
+  @Column({
+    name: 'pdf_file_name',
+    type: 'varchar',
+    length: 255,
+    nullable: true,
+  })
+  pdfFileName?: string;
+
+  @Column({
+    name: 'pdf_file_size',
+    type: 'bigint',
+    nullable: true,
+    transformer: {
+      to: (value?: number) => value,
+      from: (value?: string | number) =>
+        value !== null && value !== undefined
+          ? parseInt(value.toString(), 10)
+          : undefined,
+    },
+  })
+  pdfFileSize?: number;
+
+  @Column({
+    name: 'pdf_page_count',
+    type: 'integer',
+    nullable: true,
+  })
+  pdfPageCount?: number;
+
+  @Column({
+    name: 'pdf_checksum',
+    type: 'varchar',
+    length: 64,
+    nullable: true,
+  })
+  pdfChecksum?: string;
+
+  @Column({
+    name: 'content_status',
+    type: 'enum',
+    enum: ChapterContentStatus,
+    default: ChapterContentStatus.PENDING,
+  })
+  contentStatus: ChapterContentStatus;
 
   @Column({
     type: 'boolean',
@@ -110,6 +151,6 @@ export class Chapter extends BaseEntity {
   })
   deletedAt?: Date;
 
-  @OneToMany(() => Page, (page) => page.chapter)
-  pages: Page[];
+  @OneToMany(() => ChapterUnlock, (unlock) => unlock.chapter)
+  unlocks: ChapterUnlock[];
 }

@@ -65,22 +65,16 @@ export class BookItemDto {
   pricingModel: BookPricingModel;
 
   @ApiProperty({ example: 0 })
-  defaultCoinPerPage: number;
+  defaultChapterCoinCost: number;
 
   @ApiProperty({ example: 0 })
   defaultFreeChapters: number;
-
-  @ApiProperty({ example: 0 })
-  defaultFreePages: number;
 
   @ApiProperty({ example: false })
   isPremium: boolean;
 
   @ApiProperty({ example: 0 })
   totalChapters: number;
-
-  @ApiProperty({ example: 0 })
-  totalPages: number;
 
   @ApiProperty({ example: 0.0 })
   averageRating: number;

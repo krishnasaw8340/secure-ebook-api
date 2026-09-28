@@ -28,7 +28,8 @@ export class UpdateSeriesDto {
   @IsString()
   @MaxLength(255)
   @Matches(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, {
-    message: 'Slug must be lowercase alphanumeric characters separated by single hyphens',
+    message:
+      'Slug must be lowercase alphanumeric characters separated by single hyphens',
   })
   slug?: string;
 
@@ -46,6 +47,8 @@ export class UpdateSeriesDto {
     example: SeriesStatus.ONGOING,
   })
   @IsOptional()
-  @IsEnum(SeriesStatus, { message: 'Status must be a valid SeriesStatus enum value' })
+  @IsEnum(SeriesStatus, {
+    message: 'Status must be a valid SeriesStatus enum value',
+  })
   status?: SeriesStatus;
 }

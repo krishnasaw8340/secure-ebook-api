@@ -13,6 +13,7 @@ import {
   Min,
 } from 'class-validator';
 import { ChapterPricingModel } from '../../common/enums/chapter-pricing-model.enum';
+import { ChapterContentStatus } from '../../common/enums/chapter-content-status.enum';
 
 export class UpdateChapterDto {
   @ApiPropertyOptional({
@@ -32,7 +33,10 @@ export class UpdateChapterDto {
   @Type(() => Number)
   @IsNumber(
     { maxDecimalPlaces: 2 },
-    { message: 'chapterNumber must be a valid number with up to 2 decimal places' },
+    {
+      message:
+        'chapterNumber must be a valid number with up to 2 decimal places',
+    },
   )
   @Min(0, { message: 'chapterNumber must be greater than or equal to 0' })
   chapterNumber?: number;
@@ -57,28 +61,17 @@ export class UpdateChapterDto {
   sortOrder?: number;
 
   @ApiPropertyOptional({
-    description: 'Updated pricing model',
+    description: 'Updated monetization pricing model (FREE or PAID)',
     enum: ChapterPricingModel,
-    example: ChapterPricingModel.PARTIAL_FREE,
+    example: ChapterPricingModel.PAID,
   })
   @IsOptional()
   @IsEnum(ChapterPricingModel)
   pricingModel?: ChapterPricingModel;
 
   @ApiPropertyOptional({
-    description: 'Updated number of free preview pages (Required > 0 when pricingModel is PARTIAL_FREE)',
-    example: 5,
-    minimum: 0,
-  })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(0)
-  freePageCount?: number;
-
-  @ApiPropertyOptional({
-    description: 'Updated coin cost (Required > 0 when pricingModel is PAID)',
-    example: 30,
+    description: 'Updated coin cost for chapter access',
+    example: 2,
     minimum: 0,
   })
   @IsOptional()
@@ -88,15 +81,64 @@ export class UpdateChapterDto {
   coinCost?: number;
 
   @ApiPropertyOptional({
-    description: 'Updated total page count',
-    example: 28,
-    minimum: 0,
+    description: 'Internal PDF object storage key in R2 / S3',
+    example: 'books/b001/chapters/c001/chapter.pdf',
+    maxLength: 500,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  pdfStorageKey?: string;
+
+  @ApiPropertyOptional({
+    description: 'Original PDF file name',
+    example: 'chapter-001.pdf',
+    maxLength: 255,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  pdfFileName?: string;
+
+  @ApiPropertyOptional({
+    description: 'PDF file size in bytes',
+    example: 15420000,
+    minimum: 1,
   })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
-  @Min(0)
-  pageCount?: number;
+  @Min(1)
+  pdfFileSize?: number;
+
+  @ApiPropertyOptional({
+    description: 'Extracted PDF page count',
+    example: 42,
+    minimum: 1,
+  })
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  pdfPageCount?: number;
+
+  @ApiPropertyOptional({
+    description: 'Integrity checksum for uploaded PDF asset',
+    example: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+    maxLength: 64,
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  pdfChecksum?: string;
+
+  @ApiPropertyOptional({
+    description: 'Content lifecycle status',
+    enum: ChapterContentStatus,
+  })
+  @IsOptional()
+  @IsEnum(ChapterContentStatus)
+  contentStatus?: ChapterContentStatus;
 
   @ApiPropertyOptional({
     description: 'Updated publication status',

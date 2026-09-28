@@ -45,7 +45,9 @@ export class SeriesService {
   private isAdminUser(user?: JwtUser): boolean {
     if (!user || !user.roles) return false;
     return user.roles.some(
-      (role) => role === RoleType.ADMIN || role === RoleType.SUPER_ADMIN,
+      (role) =>
+        role === (RoleType.ADMIN as string) ||
+        role === (RoleType.SUPER_ADMIN as string),
     );
   }
 
@@ -63,10 +65,14 @@ export class SeriesService {
    * Create a new franchise series
    */
   async create(dto: CreateSeriesDto): Promise<BookSeries> {
-    const slug = dto.slug ? dto.slug.trim().toLowerCase() : generateSlug(dto.name);
+    const slug = dto.slug
+      ? dto.slug.trim().toLowerCase()
+      : generateSlug(dto.name);
 
     if (!slug) {
-      throw new ConflictException('Unable to generate a valid slug from series name');
+      throw new ConflictException(
+        'Unable to generate a valid slug from series name',
+      );
     }
 
     const existing = await this.seriesRepository.findOne({
@@ -99,7 +105,11 @@ export class SeriesService {
     const limit = query.limit ?? 20;
 
     // If a non-admin requests a draft or archived status explicitly, return empty
-    if (!isAdmin && query.status && !PUBLIC_VISIBLE_STATUSES.includes(query.status)) {
+    if (
+      !isAdmin &&
+      query.status &&
+      !PUBLIC_VISIBLE_STATUSES.includes(query.status)
+    ) {
       return {
         data: [],
         meta: {

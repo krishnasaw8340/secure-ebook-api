@@ -31,6 +31,9 @@ import {
   QueryChapterDto,
   PaginatedChapterResponseDto,
   ChapterItemDto,
+  ChapterPdfUploadInitDto,
+  ChapterPdfUploadInitResponseDto,
+  ChapterPdfUploadCompleteDto,
 } from '../dto';
 
 @ApiTags('Chapters')
@@ -147,5 +150,44 @@ export class ChaptersController {
   @ApiResponse({ status: 404, description: 'Chapter not found.' })
   remove(@Param('id') id: string) {
     return this.chaptersService.remove(id);
+  }
+
+  @Post(':id/content/upload-init')
+  @Roles(RoleType.ADMIN, RoleType.SUPER_ADMIN)
+  @UseGuards(RolesGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Initialize chapter PDF direct upload contract (Admin only)',
+  })
+  @ApiParam({ name: 'id', description: 'Chapter UUID' })
+  @ApiResponse({
+    status: 200,
+    description: 'Upload initiated with presigned contract and storage key.',
+    type: ChapterPdfUploadInitResponseDto,
+  })
+  @ApiResponse({ status: 404, description: 'Chapter not found.' })
+  initPdfUpload(@Param('id') id: string, @Body() dto: ChapterPdfUploadInitDto) {
+    return this.chaptersService.initPdfUpload(id, dto);
+  }
+
+  @Post(':id/content/complete')
+  @Roles(RoleType.ADMIN, RoleType.SUPER_ADMIN)
+  @UseGuards(RolesGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Complete chapter PDF upload and finalize metadata (Admin only)',
+  })
+  @ApiParam({ name: 'id', description: 'Chapter UUID' })
+  @ApiResponse({
+    status: 200,
+    description: 'Chapter PDF metadata finalized.',
+    type: ChapterItemDto,
+  })
+  @ApiResponse({ status: 404, description: 'Chapter not found.' })
+  completePdfUpload(
+    @Param('id') id: string,
+    @Body() dto: ChapterPdfUploadCompleteDto,
+  ) {
+    return this.chaptersService.completePdfUpload(id, dto);
   }
 }

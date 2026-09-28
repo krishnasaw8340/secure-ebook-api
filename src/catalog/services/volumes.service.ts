@@ -30,7 +30,9 @@ export class VolumesService {
   private isAdminUser(user?: JwtUser): boolean {
     if (!user || !user.roles) return false;
     return user.roles.some(
-      (role) => role === RoleType.ADMIN || role === RoleType.SUPER_ADMIN,
+      (role) =>
+        role === (RoleType.ADMIN as string) ||
+        role === (RoleType.SUPER_ADMIN as string),
     );
   }
 
@@ -96,8 +98,13 @@ export class VolumesService {
 
     try {
       return await this.volumeRepository.save(volume);
-    } catch (error: any) {
-      if (error?.code === '23505') {
+    } catch (error: unknown) {
+      if (
+        typeof error === 'object' &&
+        error !== null &&
+        'code' in error &&
+        (error as { code: string }).code === '23505'
+      ) {
         throw new ConflictException(
           `Volume ${dto.volumeNumber} already exists in series "${series.name}"`,
         );
@@ -243,7 +250,9 @@ export class VolumesService {
         where: { id: dto.seriesId },
       });
       if (!targetSeries) {
-        throw new NotFoundException(`Series with ID "${dto.seriesId}" not found`);
+        throw new NotFoundException(
+          `Series with ID "${dto.seriesId}" not found`,
+        );
       }
     }
 
@@ -294,24 +303,37 @@ export class VolumesService {
     }
 
     if (dto.releaseDate !== undefined) {
-      volume.releaseDate = dto.releaseDate ? new Date(dto.releaseDate) : undefined;
+      volume.releaseDate = dto.releaseDate
+        ? new Date(dto.releaseDate)
+        : undefined;
     }
 
     if (dto.status !== undefined) {
       volume.status = dto.status;
-      if (volume.status === VolumeStatus.PUBLISHED && !volume.publishedAt && !dto.publishedAt) {
+      if (
+        volume.status === VolumeStatus.PUBLISHED &&
+        !volume.publishedAt &&
+        !dto.publishedAt
+      ) {
         volume.publishedAt = new Date();
       }
     }
 
     if (dto.publishedAt !== undefined) {
-      volume.publishedAt = dto.publishedAt ? new Date(dto.publishedAt) : undefined;
+      volume.publishedAt = dto.publishedAt
+        ? new Date(dto.publishedAt)
+        : undefined;
     }
 
     try {
       return await this.volumeRepository.save(volume);
-    } catch (error: any) {
-      if (error?.code === '23505') {
+    } catch (error: unknown) {
+      if (
+        typeof error === 'object' &&
+        error !== null &&
+        'code' in error &&
+        (error as { code: string }).code === '23505'
+      ) {
         throw new ConflictException(
           `Volume ${targetVolumeNumber} already exists in target series`,
         );

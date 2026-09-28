@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { ChapterPricingModel } from '../../common/enums/chapter-pricing-model.enum';
+import { ChapterContentStatus } from '../../common/enums/chapter-content-status.enum';
 
 export class ChapterItemDto {
   @ApiProperty({ example: 'c0000000-0000-0000-0000-000000000001' })
@@ -24,13 +25,30 @@ export class ChapterItemDto {
   pricingModel: ChapterPricingModel;
 
   @ApiProperty({ example: 0 })
-  freePageCount: number;
-
-  @ApiProperty({ example: 0 })
   coinCost: number;
 
-  @ApiProperty({ example: 24 })
-  pageCount: number;
+  @ApiPropertyOptional({ example: 'books/b001/chapters/c001/chapter.pdf' })
+  pdfStorageKey?: string;
+
+  @ApiPropertyOptional({ example: 'chapter-001.pdf' })
+  pdfFileName?: string;
+
+  @ApiPropertyOptional({ example: 15420000 })
+  pdfFileSize?: number;
+
+  @ApiPropertyOptional({ example: 42 })
+  pdfPageCount?: number;
+
+  @ApiPropertyOptional({
+    example: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855',
+  })
+  pdfChecksum?: string;
+
+  @ApiProperty({
+    enum: ChapterContentStatus,
+    example: ChapterContentStatus.READY,
+  })
+  contentStatus: ChapterContentStatus;
 
   @ApiProperty({ example: true })
   published: boolean;

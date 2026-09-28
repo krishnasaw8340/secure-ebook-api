@@ -25,7 +25,8 @@ export class UpdateBookDto {
   seriesId?: string;
 
   @ApiPropertyOptional({
-    description: 'Optional Volume UUID within the Series (pass null or empty string to remove volume association)',
+    description:
+      'Optional Volume UUID within the Series (pass null or empty string to remove volume association)',
     example: 'b0000000-0000-0000-0000-000000000001',
   })
   @IsOptional()
@@ -99,7 +100,8 @@ export class UpdateBookDto {
   categoryId?: string;
 
   @ApiPropertyOptional({
-    description: 'Array of Genre UUIDs associated with the book (replaces existing associations if provided)',
+    description:
+      'Array of Genre UUIDs associated with the book (replaces existing associations if provided)',
     example: ['g0000000-0000-0000-0000-000000000001'],
     type: [String],
   })
@@ -109,7 +111,8 @@ export class UpdateBookDto {
   genreIds?: string[];
 
   @ApiPropertyOptional({
-    description: 'Array of Tag UUIDs associated with the book (replaces existing associations if provided)',
+    description:
+      'Array of Tag UUIDs associated with the book (replaces existing associations if provided)',
     example: ['t0000000-0000-0000-0000-000000000001'],
     type: [String],
   })
@@ -137,7 +140,7 @@ export class UpdateBookDto {
   pricingModel?: BookPricingModel;
 
   @ApiPropertyOptional({
-    description: 'Default coin cost per page when using PER_PAGE pricing',
+    description: 'Default coin cost to unlock a chapter for this book',
     example: 2,
     minimum: 0,
   })
@@ -145,7 +148,7 @@ export class UpdateBookDto {
   @Type(() => Number)
   @IsInt()
   @Min(0)
-  defaultCoinPerPage?: number;
+  defaultChapterCoinCost?: number;
 
   @ApiPropertyOptional({
     description: 'Number of initial chapters accessible for free',
@@ -159,18 +162,8 @@ export class UpdateBookDto {
   defaultFreeChapters?: number;
 
   @ApiPropertyOptional({
-    description: 'Number of initial preview pages accessible for free per chapter',
-    example: 5,
-    minimum: 0,
-  })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(0)
-  defaultFreePages?: number;
-
-  @ApiPropertyOptional({
-    description: 'Whether this book requires premium tier membership or purchase',
+    description:
+      'Whether this book requires premium tier membership or purchase',
     example: false,
   })
   @IsOptional()

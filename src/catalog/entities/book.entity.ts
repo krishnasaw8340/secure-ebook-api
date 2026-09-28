@@ -169,11 +169,11 @@ export class Book extends BaseEntity {
   pricingModel: BookPricingModel;
 
   @Column({
-    name: 'default_coin_per_page',
+    name: 'default_chapter_coin_cost',
     type: 'integer',
     default: 0,
   })
-  defaultCoinPerPage: number;
+  defaultChapterCoinCost: number;
 
   @Column({
     name: 'default_free_chapters',
@@ -181,13 +181,6 @@ export class Book extends BaseEntity {
     default: 0,
   })
   defaultFreeChapters: number;
-
-  @Column({
-    name: 'default_free_pages',
-    type: 'integer',
-    default: 0,
-  })
-  defaultFreePages: number;
 
   @Column({
     name: 'is_premium',
@@ -204,13 +197,6 @@ export class Book extends BaseEntity {
   totalChapters: number;
 
   @Column({
-    name: 'total_pages',
-    type: 'integer',
-    default: 0,
-  })
-  totalPages: number;
-
-  @Column({
     name: 'average_rating',
     type: 'decimal',
     precision: 3,
@@ -218,7 +204,8 @@ export class Book extends BaseEntity {
     default: 0.0,
     transformer: {
       to: (value: number) => value,
-      from: (value: string) => (value !== null && value !== undefined ? parseFloat(value) : value),
+      from: (value: string) =>
+        value !== null && value !== undefined ? parseFloat(value) : value,
     },
   })
   averageRating: number;
@@ -229,7 +216,8 @@ export class Book extends BaseEntity {
     default: 0,
     transformer: {
       to: (value: number) => value,
-      from: (value: string) => (value !== null && value !== undefined ? parseInt(value, 10) : value),
+      from: (value: string) =>
+        value !== null && value !== undefined ? parseInt(value, 10) : value,
     },
   })
   totalViews: number;

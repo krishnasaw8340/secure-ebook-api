@@ -20,7 +20,6 @@ import {
 import { AuthService } from './auth.service';
 import { LoginDto, RegisterDto } from './dto/register.dto';
 import { AuthResponseDto } from './dto/auth-response.dto';
-import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
 import { ResendVerificationDto } from './dto/resend-verification.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
@@ -136,8 +135,10 @@ export class AuthController {
     });
 
     // Return only accessToken + user in body (refresh token is in cookie)
-    const { refreshToken: _rt, ...safeResponse } = result;
-    return safeResponse;
+    return {
+      accessToken: result.accessToken,
+      user: result.user,
+    };
   }
 
   @Post('refresh')
@@ -157,7 +158,8 @@ export class AuthController {
     @DeviceInfo() deviceInfo: DeviceMetadata,
     @Res({ passthrough: true }) res: Response,
   ): Promise<{ accessToken: string }> {
-    const refreshToken: string | undefined = req.cookies?.refresh_token;
+    const cookies = req.cookies as Record<string, string> | undefined;
+    const refreshToken: string | undefined = cookies?.refresh_token;
 
     if (!refreshToken) {
       throw new UnauthorizedException('No refresh token provided');
@@ -191,7 +193,8 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ): Promise<void> {
-    const refreshToken: string | undefined = req.cookies?.refresh_token;
+    const cookies = req.cookies as Record<string, string> | undefined;
+    const refreshToken: string | undefined = cookies?.refresh_token;
 
     if (refreshToken) {
       // Revoke the specific session token in the database

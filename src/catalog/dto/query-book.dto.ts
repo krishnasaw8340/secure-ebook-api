@@ -80,7 +80,8 @@ export class QueryBookDto {
   tagId?: string;
 
   @ApiPropertyOptional({
-    description: 'Filter by BookStatus (Admins can view DRAFT/UNPUBLISHED/ARCHIVED; Public is restricted to PUBLISHED)',
+    description:
+      'Filter by BookStatus (Admins can view DRAFT/UNPUBLISHED/ARCHIVED; Public is restricted to PUBLISHED)',
     enum: BookStatus,
   })
   @IsOptional()
@@ -100,10 +101,10 @@ export class QueryBookDto {
     type: Boolean,
   })
   @IsOptional()
-  @Transform(({ value }) => {
+  @Transform(({ value }: { value: unknown }): boolean | undefined => {
     if (value === 'true' || value === true) return true;
     if (value === 'false' || value === false) return false;
-    return value;
+    return typeof value === 'boolean' ? value : undefined;
   })
   @IsBoolean()
   isPremium?: boolean;
@@ -146,7 +147,9 @@ export class QueryBookDto {
   })
   @IsOptional()
   @IsIn(['createdAt', 'title', 'averageRating', 'totalViews', 'releaseDate'])
-  sortBy?: 'createdAt' | 'title' | 'averageRating' | 'totalViews' | 'releaseDate' = 'createdAt';
+  sortBy?:
+    'createdAt' | 'title' | 'averageRating' | 'totalViews' | 'releaseDate' =
+    'createdAt';
 
   @ApiPropertyOptional({
     description: 'Sort order',

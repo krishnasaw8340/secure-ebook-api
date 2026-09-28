@@ -21,11 +21,23 @@ describe('VolumesController', () => {
       create: jest.fn().mockResolvedValue(mockVolume),
       findAll: jest.fn().mockResolvedValue({
         data: [mockVolume],
-        meta: { total: 1, page: 1, limit: 20, totalPages: 1, hasNextPage: false, hasPrevPage: false },
+        meta: {
+          total: 1,
+          page: 1,
+          limit: 20,
+          totalPages: 1,
+          hasNextPage: false,
+          hasPrevPage: false,
+        },
       }),
       findOne: jest.fn().mockResolvedValue(mockVolume),
-      update: jest.fn().mockResolvedValue({ ...mockVolume, title: 'Updated Romance Dawn' }),
-      remove: jest.fn().mockResolvedValue({ message: 'Volume deleted successfully', id: mockVolume.id }),
+      update: jest
+        .fn()
+        .mockResolvedValue({ ...mockVolume, title: 'Updated Romance Dawn' }),
+      remove: jest.fn().mockResolvedValue({
+        message: 'Volume deleted successfully',
+        id: mockVolume.id,
+      }),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -57,7 +69,12 @@ describe('VolumesController', () => {
   });
 
   it('GET /volumes calls service.findAll', async () => {
-    const res = await controller.findAll({ page: 1, limit: 20, sortBy: 'sortOrder', sortOrder: 'ASC' });
+    const res = await controller.findAll({
+      page: 1,
+      limit: 20,
+      sortBy: 'sortOrder',
+      sortOrder: 'ASC',
+    });
     expect(service.findAll).toHaveBeenCalled();
     expect(res.data.length).toBe(1);
   });

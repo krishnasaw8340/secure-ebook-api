@@ -27,9 +27,13 @@ export class GenreSeeder implements Seeder {
       if (!existing) {
         const newRecord = genreRepository.create(genreData);
         await genreRepository.save(newRecord);
-        console.log(`✅ [Seed] Created missing genre: ${genreData.name} (${genreData.slug})`);
+        console.log(
+          `✅ [Seed] Created missing genre: ${genreData.name} (${genreData.slug})`,
+        );
       } else {
-        console.log(`ℹ️ [Seed] Genre already exists: ${genreData.name} (${genreData.slug})`);
+        console.log(
+          `ℹ️ [Seed] Genre already exists: ${genreData.name} (${genreData.slug})`,
+        );
       }
     }
   }

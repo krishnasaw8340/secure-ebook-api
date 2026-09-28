@@ -9,9 +9,8 @@ import { VolumesService } from './services/volumes.service';
 import { BooksController } from './controllers/books.controller';
 import { BooksService } from './services/books.service';
 import { ChaptersController } from './controllers/chapters.controller';
+import { AdminChaptersController } from './controllers/admin-chapters.controller';
 import { ChaptersService } from './services/chapters.service';
-import { PagesController } from './controllers/pages.controller';
-import { PagesService } from './services/pages.service';
 import {
   BookSeries,
   Volume,
@@ -25,7 +24,7 @@ import {
   BookGenre,
   BookTag,
   Chapter,
-  Page,
+  ChapterUnlock,
   MediaAsset,
 } from './entities';
 
@@ -44,7 +43,7 @@ import {
       BookGenre,
       BookTag,
       Chapter,
-      Page,
+      ChapterUnlock,
       MediaAsset,
     ]),
   ],
@@ -54,7 +53,7 @@ import {
     VolumesController,
     BooksController,
     ChaptersController,
-    PagesController,
+    AdminChaptersController,
   ],
   providers: [
     CatalogService,
@@ -62,7 +61,6 @@ import {
     VolumesService,
     BooksService,
     ChaptersService,
-    PagesService,
   ],
   exports: [
     TypeOrmModule,
@@ -71,7 +69,6 @@ import {
     VolumesService,
     BooksService,
     ChaptersService,
-    PagesService,
   ],
 })
 export class CatalogModule {}

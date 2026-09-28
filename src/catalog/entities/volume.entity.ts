@@ -44,7 +44,8 @@ export class Volume extends BaseEntity {
     scale: 2,
     transformer: {
       to: (value: number) => value,
-      from: (value: string) => (value !== null && value !== undefined ? parseFloat(value) : value),
+      from: (value: string) =>
+        value !== null && value !== undefined ? parseFloat(value) : value,
     },
   })
   volumeNumber: number;

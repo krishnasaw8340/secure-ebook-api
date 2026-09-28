@@ -30,7 +30,13 @@ export class CreateVolumeDto {
   })
   @IsNotEmpty({ message: 'volumeNumber is required' })
   @Type(() => Number)
-  @IsNumber({ maxDecimalPlaces: 2 }, { message: 'volumeNumber must be a valid number with up to 2 decimal places' })
+  @IsNumber(
+    { maxDecimalPlaces: 2 },
+    {
+      message:
+        'volumeNumber must be a valid number with up to 2 decimal places',
+    },
+  )
   @Min(0, { message: 'volumeNumber must be greater than or equal to 0' })
   volumeNumber: number;
 
@@ -45,7 +51,8 @@ export class CreateVolumeDto {
   title?: string;
 
   @ApiPropertyOptional({
-    description: 'Volume URL identifier slug. If omitted, auto-generated from series slug and volumeNumber.',
+    description:
+      'Volume URL identifier slug. If omitted, auto-generated from series slug and volumeNumber.',
     example: 'one-piece-vol-1',
     maxLength: 255,
   })
@@ -63,7 +70,8 @@ export class CreateVolumeDto {
   description?: string;
 
   @ApiPropertyOptional({
-    description: 'Display sequence order. If omitted, defaults based on volumeNumber.',
+    description:
+      'Display sequence order. If omitted, defaults based on volumeNumber.',
     example: 1,
     default: 0,
   })

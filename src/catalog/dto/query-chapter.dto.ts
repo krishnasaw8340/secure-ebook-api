@@ -31,14 +31,15 @@ export class QueryChapterDto {
   pricingModel?: ChapterPricingModel;
 
   @ApiPropertyOptional({
-    description: 'Filter by publication status (Admins only for false; Public is restricted to true)',
+    description:
+      'Filter by publication status (Admins only for false; Public is restricted to true)',
     type: Boolean,
   })
   @IsOptional()
-  @Transform(({ value }) => {
+  @Transform(({ value }: { value: unknown }): boolean | undefined => {
     if (value === 'true' || value === true) return true;
     if (value === 'false' || value === false) return false;
-    return value;
+    return typeof value === 'boolean' ? value : undefined;
   })
   @IsBoolean()
   published?: boolean;

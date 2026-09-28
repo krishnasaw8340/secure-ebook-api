@@ -24,7 +24,9 @@ describe('SeriesService', () => {
     repo = {
       findOne: jest.fn(),
       create: jest.fn((dto) => dto),
-      save: jest.fn((entity) => Promise.resolve({ id: mockSeries.id, ...entity })),
+      save: jest.fn((entity) =>
+        Promise.resolve({ id: mockSeries.id, ...entity }),
+      ),
       softDelete: jest.fn().mockResolvedValue({ affected: 1 }),
       createQueryBuilder: jest.fn(),
     };
@@ -62,7 +64,9 @@ describe('SeriesService', () => {
         description: 'Pirate manga',
       });
 
-      expect(repo.findOne).toHaveBeenCalledWith({ where: { slug: 'one-piece' } });
+      expect(repo.findOne).toHaveBeenCalledWith({
+        where: { slug: 'one-piece' },
+      });
       expect(result.slug).toBe('one-piece');
       expect(result.status).toBe(SeriesStatus.DRAFT);
     });
@@ -103,7 +107,9 @@ describe('SeriesService', () => {
       };
       repo.createQueryBuilder.mockReturnValue(qb);
 
-      await expect(service.findOne('one-piece')).rejects.toThrow(NotFoundException);
+      await expect(service.findOne('one-piece')).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('should allow ADMIN users to see DRAFT series', async () => {
@@ -116,7 +122,11 @@ describe('SeriesService', () => {
       };
       repo.createQueryBuilder.mockReturnValue(qb);
 
-      const adminUser = { userId: 'u1', email: 'admin@kuroyomi.com', roles: [RoleType.ADMIN] };
+      const adminUser = {
+        userId: 'u1',
+        email: 'admin@kuroyomi.com',
+        roles: [RoleType.ADMIN],
+      };
       const result = await service.findOne('one-piece', adminUser);
       expect(result.status).toBe(SeriesStatus.DRAFT);
     });

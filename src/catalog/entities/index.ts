@@ -10,5 +10,5 @@ export * from './language.entity';
 export * from './book-genre.entity';
 export * from './book-tag.entity';
 export * from './chapter.entity';
-export * from './page.entity';
+export * from './chapter-unlock.entity';
 export * from './media-asset.entity';

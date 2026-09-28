@@ -59,7 +59,9 @@ export class BooksService {
   private isAdminUser(user?: JwtUser): boolean {
     if (!user || !user.roles) return false;
     return user.roles.some(
-      (role) => role === RoleType.ADMIN || role === RoleType.SUPER_ADMIN,
+      (role) =>
+        role === (RoleType.ADMIN as string) ||
+        role === (RoleType.SUPER_ADMIN as string),
     );
   }
 
@@ -88,7 +90,9 @@ export class BooksService {
         where: { id: dto.volumeId },
       });
       if (!volume) {
-        throw new NotFoundException(`Volume with ID "${dto.volumeId}" not found`);
+        throw new NotFoundException(
+          `Volume with ID "${dto.volumeId}" not found`,
+        );
       }
       if (volume.seriesId !== dto.seriesId) {
         throw new BadRequestException(
@@ -102,7 +106,9 @@ export class BooksService {
       where: { id: dto.languageId },
     });
     if (!language) {
-      throw new NotFoundException(`Language with ID "${dto.languageId}" not found`);
+      throw new NotFoundException(
+        `Language with ID "${dto.languageId}" not found`,
+      );
     }
 
     // 4. Verify Category exists
@@ -110,7 +116,9 @@ export class BooksService {
       where: { id: dto.categoryId },
     });
     if (!category) {
-      throw new NotFoundException(`Category with ID "${dto.categoryId}" not found`);
+      throw new NotFoundException(
+        `Category with ID "${dto.categoryId}" not found`,
+      );
     }
 
     // 5. Verify Author if provided
@@ -119,7 +127,9 @@ export class BooksService {
         where: { id: dto.authorId },
       });
       if (!author) {
-        throw new NotFoundException(`Author with ID "${dto.authorId}" not found`);
+        throw new NotFoundException(
+          `Author with ID "${dto.authorId}" not found`,
+        );
       }
     }
 
@@ -129,7 +139,9 @@ export class BooksService {
         where: { id: dto.artistId },
       });
       if (!artist) {
-        throw new NotFoundException(`Artist with ID "${dto.artistId}" not found`);
+        throw new NotFoundException(
+          `Artist with ID "${dto.artistId}" not found`,
+        );
       }
     }
 
@@ -154,9 +166,13 @@ export class BooksService {
     }
 
     // 9. Generate and verify slug
-    const slug = dto.slug ? dto.slug.trim().toLowerCase() : generateSlug(dto.title);
+    const slug = dto.slug
+      ? dto.slug.trim().toLowerCase()
+      : generateSlug(dto.title);
     if (!slug) {
-      throw new ConflictException('Unable to generate a valid slug from book title');
+      throw new ConflictException(
+        'Unable to generate a valid slug from book title',
+      );
     }
 
     const existingBook = await this.bookRepository.findOne({
@@ -188,9 +204,8 @@ export class BooksService {
       categoryId: dto.categoryId,
       status: dto.status ?? BookStatus.DRAFT,
       pricingModel: dto.pricingModel ?? BookPricingModel.FREE,
-      defaultCoinPerPage: dto.defaultCoinPerPage ?? 0,
+      defaultChapterCoinCost: dto.defaultChapterCoinCost ?? 0,
       defaultFreeChapters: dto.defaultFreeChapters ?? 0,
-      defaultFreePages: dto.defaultFreePages ?? 0,
       isPremium: dto.isPremium ?? false,
       releaseDate: dto.releaseDate ? new Date(dto.releaseDate) : undefined,
       publishedAt,
@@ -201,8 +216,13 @@ export class BooksService {
     let savedBook: Book;
     try {
       savedBook = await this.bookRepository.save(book);
-    } catch (error: any) {
-      if (error?.code === '23505') {
+    } catch (error: unknown) {
+      if (
+        typeof error === 'object' &&
+        error !== null &&
+        'code' in error &&
+        (error as { code: string }).code === '23505'
+      ) {
         throw new ConflictException(`Book with slug "${slug}" already exists`);
       }
       throw error;
@@ -434,7 +454,9 @@ export class BooksService {
         where: { id: dto.seriesId },
       });
       if (!series) {
-        throw new NotFoundException(`Series with ID "${dto.seriesId}" not found`);
+        throw new NotFoundException(
+          `Series with ID "${dto.seriesId}" not found`,
+        );
       }
       book.seriesId = dto.seriesId;
     }
@@ -448,7 +470,9 @@ export class BooksService {
           where: { id: dto.volumeId },
         });
         if (!volume) {
-          throw new NotFoundException(`Volume with ID "${dto.volumeId}" not found`);
+          throw new NotFoundException(
+            `Volume with ID "${dto.volumeId}" not found`,
+          );
         }
         if (volume.seriesId !== targetSeriesId) {
           throw new BadRequestException(
@@ -494,7 +518,9 @@ export class BooksService {
           where: { id: dto.authorId },
         });
         if (!author) {
-          throw new NotFoundException(`Author with ID "${dto.authorId}" not found`);
+          throw new NotFoundException(
+            `Author with ID "${dto.authorId}" not found`,
+          );
         }
         book.authorId = dto.authorId;
       }
@@ -509,7 +535,9 @@ export class BooksService {
           where: { id: dto.artistId },
         });
         if (!artist) {
-          throw new NotFoundException(`Artist with ID "${dto.artistId}" not found`);
+          throw new NotFoundException(
+            `Artist with ID "${dto.artistId}" not found`,
+          );
         }
         book.artistId = dto.artistId;
       }
@@ -523,7 +551,9 @@ export class BooksService {
           where: { slug: newSlug },
         });
         if (existing && existing.id !== book.id) {
-          throw new ConflictException(`Book with slug "${newSlug}" already exists`);
+          throw new ConflictException(
+            `Book with slug "${newSlug}" already exists`,
+          );
         }
         book.slug = newSlug;
       }
@@ -546,16 +576,12 @@ export class BooksService {
       book.pricingModel = dto.pricingModel;
     }
 
-    if (dto.defaultCoinPerPage !== undefined) {
-      book.defaultCoinPerPage = dto.defaultCoinPerPage;
+    if (dto.defaultChapterCoinCost !== undefined) {
+      book.defaultChapterCoinCost = dto.defaultChapterCoinCost;
     }
 
     if (dto.defaultFreeChapters !== undefined) {
       book.defaultFreeChapters = dto.defaultFreeChapters;
-    }
-
-    if (dto.defaultFreePages !== undefined) {
-      book.defaultFreePages = dto.defaultFreePages;
     }
 
     if (dto.isPremium !== undefined) {
@@ -563,7 +589,9 @@ export class BooksService {
     }
 
     if (dto.releaseDate !== undefined) {
-      book.releaseDate = dto.releaseDate ? new Date(dto.releaseDate) : undefined;
+      book.releaseDate = dto.releaseDate
+        ? new Date(dto.releaseDate)
+        : undefined;
     }
 
     if (dto.status !== undefined) {
@@ -578,15 +606,22 @@ export class BooksService {
     }
 
     if (dto.publishedAt !== undefined) {
-      book.publishedAt = dto.publishedAt ? new Date(dto.publishedAt) : undefined;
+      book.publishedAt = dto.publishedAt
+        ? new Date(dto.publishedAt)
+        : undefined;
     }
 
     book.updatedBy = user?.userId;
 
     try {
       await this.bookRepository.save(book);
-    } catch (error: any) {
-      if (error?.code === '23505') {
+    } catch (error: unknown) {
+      if (
+        typeof error === 'object' &&
+        error !== null &&
+        'code' in error &&
+        (error as { code: string }).code === '23505'
+      ) {
         throw new ConflictException(`Book slug conflict`);
       }
       throw error;

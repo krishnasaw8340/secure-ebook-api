@@ -21,7 +21,8 @@ export class CreateSeriesDto {
   name: string;
 
   @ApiPropertyOptional({
-    description: 'Unique URL-friendly slug. If omitted, auto-generated from name.',
+    description:
+      'Unique URL-friendly slug. If omitted, auto-generated from name.',
     example: 'one-piece',
     maxLength: 255,
   })
@@ -29,13 +30,15 @@ export class CreateSeriesDto {
   @IsString()
   @MaxLength(255)
   @Matches(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, {
-    message: 'Slug must be lowercase alphanumeric characters separated by single hyphens',
+    message:
+      'Slug must be lowercase alphanumeric characters separated by single hyphens',
   })
   slug?: string;
 
   @ApiPropertyOptional({
     description: 'Series synopsis and background overview',
-    example: 'Follow Monkey D. Luffy and his swashbuckling pirate crew in search of the ultimate treasure, the One Piece.',
+    example:
+      'Follow Monkey D. Luffy and his swashbuckling pirate crew in search of the ultimate treasure, the One Piece.',
   })
   @IsOptional()
   @IsString()
@@ -48,6 +51,8 @@ export class CreateSeriesDto {
     example: SeriesStatus.DRAFT,
   })
   @IsOptional()
-  @IsEnum(SeriesStatus, { message: 'Status must be a valid SeriesStatus enum value' })
+  @IsEnum(SeriesStatus, {
+    message: 'Status must be a valid SeriesStatus enum value',
+  })
   status?: SeriesStatus;
 }

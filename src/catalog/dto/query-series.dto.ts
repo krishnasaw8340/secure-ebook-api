@@ -45,7 +45,8 @@ export class QuerySeriesDto {
   search?: string;
 
   @ApiPropertyOptional({
-    description: 'Filter by specific SeriesStatus (Admins can view DRAFT/ARCHIVED; Public is restricted to published statuses)',
+    description:
+      'Filter by specific SeriesStatus (Admins can view DRAFT/ARCHIVED; Public is restricted to published statuses)',
     enum: SeriesStatus,
   })
   @IsOptional()

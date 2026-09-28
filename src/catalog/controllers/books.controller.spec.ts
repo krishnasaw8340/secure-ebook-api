@@ -71,13 +71,18 @@ describe('BooksController', () => {
       categoryId: 'c0000000-0000-0000-0000-000000000001',
     };
     const user = { userId: 'u1', email: 'admin@kuroyomi.com', roles: [] };
-    const res = await controller.create(dto, user as any);
+    const res = await controller.create(dto, user);
     expect(service.create).toHaveBeenCalledWith(dto, user);
     expect(res).toEqual(mockBook);
   });
 
   it('GET /books calls service.findAll', async () => {
-    const query = { page: 1, limit: 20, sortBy: 'createdAt' as const, sortOrder: 'DESC' as const };
+    const query = {
+      page: 1,
+      limit: 20,
+      sortBy: 'createdAt' as const,
+      sortOrder: 'DESC' as const,
+    };
     const res = await controller.findAll(query);
     expect(service.findAll).toHaveBeenCalledWith(query, undefined);
     expect(res.data.length).toBe(1);
@@ -85,14 +90,17 @@ describe('BooksController', () => {
 
   it('GET /books/:id calls service.findOne', async () => {
     const res = await controller.findOne('one-piece-vol-1-romance-dawn');
-    expect(service.findOne).toHaveBeenCalledWith('one-piece-vol-1-romance-dawn', undefined);
+    expect(service.findOne).toHaveBeenCalledWith(
+      'one-piece-vol-1-romance-dawn',
+      undefined,
+    );
     expect(res.id).toBe(mockBook.id);
   });
 
   it('PATCH /books/:id calls service.update', async () => {
     const dto = { title: 'One Piece, Vol. 1: Romance Dawn (Special Edition)' };
     const user = { userId: 'u1', email: 'admin@kuroyomi.com', roles: [] };
-    const res = await controller.update(mockBook.id, dto, user as any);
+    const res = await controller.update(mockBook.id, dto, user);
     expect(service.update).toHaveBeenCalledWith(mockBook.id, dto, user);
     expect(res.title).toContain('Special Edition');
   });

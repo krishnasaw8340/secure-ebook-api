@@ -23,9 +23,13 @@ export class CategorySeeder implements Seeder {
       if (!existing) {
         const newRecord = categoryRepository.create(catData);
         await categoryRepository.save(newRecord);
-        console.log(`✅ [Seed] Created missing category: ${catData.name} (${catData.slug})`);
+        console.log(
+          `✅ [Seed] Created missing category: ${catData.name} (${catData.slug})`,
+        );
       } else {
-        console.log(`ℹ️ [Seed] Category already exists: ${catData.name} (${catData.slug})`);
+        console.log(
+          `ℹ️ [Seed] Category already exists: ${catData.name} (${catData.slug})`,
+        );
       }
     }
   }

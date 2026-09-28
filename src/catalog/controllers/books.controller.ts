@@ -42,16 +42,25 @@ export class BooksController {
   @Roles(RoleType.ADMIN, RoleType.SUPER_ADMIN)
   @UseGuards(RolesGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Create a new catalog book with relations (Admin only)' })
+  @ApiOperation({
+    summary: 'Create a new catalog book with relations (Admin only)',
+  })
   @ApiResponse({
     status: 201,
     description: 'Book created successfully.',
     type: BookItemDto,
   })
-  @ApiResponse({ status: 400, description: 'Validation failed or volume mismatch with series.' })
+  @ApiResponse({
+    status: 400,
+    description: 'Validation failed or volume mismatch with series.',
+  })
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
   @ApiResponse({ status: 403, description: 'Forbidden. Admin role required.' })
-  @ApiResponse({ status: 404, description: 'Referenced Series, Volume, Language, Category, Author, Artist, Genre, or Tag not found.' })
+  @ApiResponse({
+    status: 404,
+    description:
+      'Referenced Series, Volume, Language, Category, Author, Artist, Genre, or Tag not found.',
+  })
   @ApiResponse({ status: 409, description: 'Book slug already exists.' })
   create(@Body() dto: CreateBookDto, @CurrentUser() user?: JwtUser) {
     return this.booksService.create(dto, user);
@@ -75,7 +84,8 @@ export class BooksController {
   @Get(':id')
   @Public()
   @ApiOperation({
-    summary: 'Get single book by UUID or unique slug with joined relations (Public / Admin)',
+    summary:
+      'Get single book by UUID or unique slug with joined relations (Public / Admin)',
   })
   @ApiParam({
     name: 'id',
@@ -97,7 +107,8 @@ export class BooksController {
   @UseGuards(RolesGuard)
   @ApiBearerAuth()
   @ApiOperation({
-    summary: 'Update book details or relational associations by UUID or slug (Admin only)',
+    summary:
+      'Update book details or relational associations by UUID or slug (Admin only)',
   })
   @ApiParam({ name: 'id', description: 'Book UUID or slug' })
   @ApiResponse({
@@ -105,10 +116,16 @@ export class BooksController {
     description: 'Book updated successfully.',
     type: BookItemDto,
   })
-  @ApiResponse({ status: 400, description: 'Validation failed or volume mismatch.' })
+  @ApiResponse({
+    status: 400,
+    description: 'Validation failed or volume mismatch.',
+  })
   @ApiResponse({ status: 401, description: 'Unauthorized.' })
   @ApiResponse({ status: 403, description: 'Forbidden. Admin role required.' })
-  @ApiResponse({ status: 404, description: 'Book or referenced entity not found.' })
+  @ApiResponse({
+    status: 404,
+    description: 'Book or referenced entity not found.',
+  })
   @ApiResponse({ status: 409, description: 'Book slug conflict.' })
   update(
     @Param('id') id: string,

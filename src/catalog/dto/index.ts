@@ -14,6 +14,4 @@ export * from './create-chapter.dto';
 export * from './update-chapter.dto';
 export * from './query-chapter.dto';
 export * from './chapter-response.dto';
-export * from './create-pages.dto';
-export * from './reorder-pages.dto';
-export * from './page-response.dto';
+export * from './chapter-pdf-upload.dto';

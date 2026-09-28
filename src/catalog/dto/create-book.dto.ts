@@ -54,7 +54,8 @@ export class CreateBookDto {
   japaneseTitle?: string;
 
   @ApiPropertyOptional({
-    description: 'Unique URL slug identifier. Auto-generated from title if omitted.',
+    description:
+      'Unique URL slug identifier. Auto-generated from title if omitted.',
     example: 'one-piece-vol-1-romance-dawn',
     maxLength: 255,
   })
@@ -144,16 +145,16 @@ export class CreateBookDto {
   pricingModel?: BookPricingModel;
 
   @ApiPropertyOptional({
-    description: 'Default coin cost per page when using PER_PAGE pricing',
+    description: 'Default coin cost to unlock a chapter for this book',
     default: 0,
-    example: 0,
+    example: 2,
     minimum: 0,
   })
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   @Min(0)
-  defaultCoinPerPage?: number;
+  defaultChapterCoinCost?: number;
 
   @ApiPropertyOptional({
     description: 'Number of initial chapters accessible for free',
@@ -168,19 +169,8 @@ export class CreateBookDto {
   defaultFreeChapters?: number;
 
   @ApiPropertyOptional({
-    description: 'Number of initial preview pages accessible for free per chapter',
-    default: 0,
-    example: 5,
-    minimum: 0,
-  })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(0)
-  defaultFreePages?: number;
-
-  @ApiPropertyOptional({
-    description: 'Whether this book requires premium tier membership or purchase',
+    description:
+      'Whether this book requires premium tier membership or purchase',
     default: false,
     example: false,
   })

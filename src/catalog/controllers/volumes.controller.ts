@@ -78,7 +78,8 @@ export class VolumesController {
   @Get(':id')
   @Public()
   @ApiOperation({
-    summary: 'Get single volume by UUID or slug with relations (Public / Admin)',
+    summary:
+      'Get single volume by UUID or slug with relations (Public / Admin)',
   })
   @ApiParam({
     name: 'id',
@@ -115,7 +116,10 @@ export class VolumesController {
     status: 404,
     description: 'Volume or target Series not found.',
   })
-  @ApiResponse({ status: 409, description: 'Volume number conflict in series.' })
+  @ApiResponse({
+    status: 409,
+    description: 'Volume number conflict in series.',
+  })
   update(@Param('id') id: string, @Body() dto: UpdateVolumeDto) {
     return this.volumesService.update(id, dto);
   }

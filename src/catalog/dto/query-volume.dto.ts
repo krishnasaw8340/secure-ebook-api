@@ -53,7 +53,8 @@ export class QueryVolumeDto {
   search?: string;
 
   @ApiPropertyOptional({
-    description: 'Filter by VolumeStatus (Admins can view DRAFT/ARCHIVED; Public is restricted to PUBLISHED)',
+    description:
+      'Filter by VolumeStatus (Admins can view DRAFT/ARCHIVED; Public is restricted to PUBLISHED)',
     enum: VolumeStatus,
   })
   @IsOptional()

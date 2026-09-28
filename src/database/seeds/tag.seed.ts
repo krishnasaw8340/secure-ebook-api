@@ -24,9 +24,13 @@ export class TagSeeder implements Seeder {
       if (!existing) {
         const newRecord = tagRepository.create(tagData);
         await tagRepository.save(newRecord);
-        console.log(`✅ [Seed] Created missing tag: ${tagData.name} (${tagData.slug})`);
+        console.log(
+          `✅ [Seed] Created missing tag: ${tagData.name} (${tagData.slug})`,
+        );
       } else {
-        console.log(`ℹ️ [Seed] Tag already exists: ${tagData.name} (${tagData.slug})`);
+        console.log(
+          `ℹ️ [Seed] Tag already exists: ${tagData.name} (${tagData.slug})`,
+        );
       }
     }
   }

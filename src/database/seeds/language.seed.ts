@@ -22,9 +22,13 @@ export class LanguageSeeder implements Seeder {
       if (!existing) {
         const newRecord = languageRepository.create(langData);
         await languageRepository.save(newRecord);
-        console.log(`✅ [Seed] Created missing language: ${langData.name} (${langData.code})`);
+        console.log(
+          `✅ [Seed] Created missing language: ${langData.name} (${langData.code})`,
+        );
       } else {
-        console.log(`ℹ️ [Seed] Language already exists: ${langData.name} (${langData.code})`);
+        console.log(
+          `ℹ️ [Seed] Language already exists: ${langData.name} (${langData.code})`,
+        );
       }
     }
   }
