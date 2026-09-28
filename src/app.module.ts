@@ -11,6 +11,7 @@ import { WalletModule } from './wallet/wallet.module';
 import { PaymentModule } from './payment/payment.module';
 import { CommonModule } from './common/common.module';
 import { DatabaseModule } from './database/database.module';
+import { StorageModule } from './storage/storage.module';
 import { JwtAuthGuard } from './auth/guards/jwt-auth.guard';
 import configuration from './config';
 import validationSchema from './config/validation.schema';
@@ -33,6 +34,7 @@ import validationSchema from './config/validation.schema';
     PaymentModule,
     CommonModule,
     DatabaseModule,
+    StorageModule,
   ],
   controllers: [AppController],
   providers: [

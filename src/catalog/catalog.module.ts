@@ -27,9 +27,11 @@ import {
   ChapterUnlock,
   MediaAsset,
 } from './entities';
+import { StorageModule } from '../storage/storage.module';
 
 @Module({
   imports: [
+    StorageModule,
     TypeOrmModule.forFeature([
       BookSeries,
       Volume,

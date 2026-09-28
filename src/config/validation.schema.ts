@@ -31,5 +31,12 @@ const validationSchema = Joi.object({
   // Payment (optional until implemented)
   RAZORPAY_KEY: Joi.string().optional(),
   RAZORPAY_SECRET: Joi.string().optional(),
+
+  // AWS S3
+  AWS_ACCESS_KEY_ID: Joi.string().optional(),
+  AWS_SECRET_ACCESS_KEY: Joi.string().optional(),
+  AWS_REGION: Joi.string().default('ap-south-1'),
+  AWS_S3_BUCKET: Joi.string().optional(),
+  MAX_CHAPTER_PDF_SIZE_MB: Joi.number().default(200),
 });
 export default validationSchema;

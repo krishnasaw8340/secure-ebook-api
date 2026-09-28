@@ -31,6 +31,8 @@ import {
   QueryChapterDto,
   PaginatedChapterResponseDto,
   ChapterItemDto,
+  ChapterPdfUploadUrlDto,
+  ChapterPdfUploadUrlResponseDto,
   ChapterPdfUploadInitDto,
   ChapterPdfUploadInitResponseDto,
   ChapterPdfUploadCompleteDto,
@@ -152,12 +154,41 @@ export class ChaptersController {
     return this.chaptersService.remove(id);
   }
 
+  @Post(':id/content/upload-url')
+  @Roles(RoleType.ADMIN, RoleType.SUPER_ADMIN)
+  @UseGuards(RolesGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary:
+      'Generate S3 presigned PUT URL for direct browser PDF upload (Admin only)',
+  })
+  @ApiParam({ name: 'id', description: 'Chapter UUID' })
+  @ApiResponse({
+    status: 200,
+    description: 'S3 presigned PUT URL and immutable object key generated.',
+    type: ChapterPdfUploadUrlResponseDto,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid file size, non-PDF content type, or chapter deleted.',
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  @ApiResponse({ status: 403, description: 'Forbidden. Admin role required.' })
+  @ApiResponse({ status: 404, description: 'Chapter not found.' })
+  generateUploadUrl(
+    @Param('id') id: string,
+    @Body() dto: ChapterPdfUploadUrlDto,
+  ) {
+    return this.chaptersService.generateUploadUrl(id, dto);
+  }
+
   @Post(':id/content/upload-init')
   @Roles(RoleType.ADMIN, RoleType.SUPER_ADMIN)
   @UseGuards(RolesGuard)
   @ApiBearerAuth()
   @ApiOperation({
-    summary: 'Initialize chapter PDF direct upload contract (Admin only)',
+    summary:
+      'Initialize chapter PDF direct upload contract (Admin only - alias for upload-url)',
   })
   @ApiParam({ name: 'id', description: 'Chapter UUID' })
   @ApiResponse({
@@ -165,6 +196,9 @@ export class ChaptersController {
     description: 'Upload initiated with presigned contract and storage key.',
     type: ChapterPdfUploadInitResponseDto,
   })
+  @ApiResponse({ status: 400, description: 'Validation failed.' })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  @ApiResponse({ status: 403, description: 'Forbidden. Admin role required.' })
   @ApiResponse({ status: 404, description: 'Chapter not found.' })
   initPdfUpload(@Param('id') id: string, @Body() dto: ChapterPdfUploadInitDto) {
     return this.chaptersService.initPdfUpload(id, dto);
@@ -175,15 +209,23 @@ export class ChaptersController {
   @UseGuards(RolesGuard)
   @ApiBearerAuth()
   @ApiOperation({
-    summary: 'Complete chapter PDF upload and finalize metadata (Admin only)',
+    summary:
+      'Verify S3 PDF object and finalize Chapter metadata (Admin only)',
   })
   @ApiParam({ name: 'id', description: 'Chapter UUID' })
   @ApiResponse({
     status: 200,
-    description: 'Chapter PDF metadata finalized.',
+    description: 'Chapter PDF metadata verified and finalized.',
     type: ChapterItemDto,
   })
-  @ApiResponse({ status: 404, description: 'Chapter not found.' })
+  @ApiResponse({
+    status: 400,
+    description:
+      'Invalid object key, non-PDF Content-Type, or oversized object.',
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  @ApiResponse({ status: 403, description: 'Forbidden. Admin role required.' })
+  @ApiResponse({ status: 404, description: 'Chapter or S3 object not found.' })
   completePdfUpload(
     @Param('id') id: string,
     @Body() dto: ChapterPdfUploadCompleteDto,

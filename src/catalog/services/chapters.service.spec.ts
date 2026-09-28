@@ -10,11 +10,13 @@ import { Chapter } from '../entities/chapter.entity';
 import { Book } from '../entities/book.entity';
 import { ChapterPricingModel } from '../../common/enums/chapter-pricing-model.enum';
 import { ChapterContentStatus } from '../../common/enums/chapter-content-status.enum';
+import { StorageService } from '../../storage/storage.service';
 
 describe('ChaptersService', () => {
   let service: ChaptersService;
   let chapterRepo: any;
   let bookRepo: any;
+  let storageService: any;
 
   const mockBook: Partial<Book> = {
     id: 'e0000000-0000-0000-0000-000000000001',
@@ -62,6 +64,19 @@ describe('ChaptersService', () => {
       update: jest.fn().mockResolvedValue({ affected: 1 }),
     };
 
+    storageService = {
+      generatePresignedUploadUrl: jest
+        .fn()
+        .mockResolvedValue('https://storage-mock.amazonaws.com/upload'),
+      headObject: jest.fn().mockResolvedValue({
+        ContentType: 'application/pdf',
+        ContentLength: 15420000,
+      }),
+      getMaxFileSizeBytes: jest.fn().mockReturnValue(200 * 1024 * 1024),
+      getMaxFileSizeMb: jest.fn().mockReturnValue(200),
+      getBucketName: jest.fn().mockReturnValue('ebook-platform-pdfs-prod'),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ChaptersService,
@@ -72,6 +87,10 @@ describe('ChaptersService', () => {
         {
           provide: getRepositoryToken(Book),
           useValue: bookRepo,
+        },
+        {
+          provide: StorageService,
+          useValue: storageService,
         },
       ],
     }).compile();
@@ -286,38 +305,173 @@ describe('ChaptersService', () => {
   });
 
   describe('upload contracts', () => {
-    it('should initiate PDF upload contract with deterministic key', async () => {
+    it('should generate S3 presigned upload URL with immutable versioned key', async () => {
       chapterRepo.findOne.mockResolvedValue({ ...mockChapter });
 
-      const result = await service.initPdfUpload(mockChapter.id!, {
+      const result = await service.generateUploadUrl(mockChapter.id!, {
         fileName: 'chapter-001.pdf',
         fileSize: 15420000,
+        contentType: 'application/pdf',
       });
 
       expect(result.chapterId).toBe(mockChapter.id);
-      expect(result.storageKey).toBe(
-        `books/${mockChapter.bookId}/chapters/${mockChapter.id}/chapter.pdf`,
+      expect(result.uploadId).toBeDefined();
+      expect(result.versionId).toBeDefined();
+      expect(result.objectKey).toBe(
+        `chapters/${mockChapter.id}/versions/${result.versionId}/chapter.pdf`,
       );
-      expect(result.uploadUrl).toBeDefined();
+      expect(result.storageKey).toBe(result.objectKey);
+      expect(result.uploadUrl).toBe('https://storage-mock.amazonaws.com/upload');
+      expect(result.expiresIn).toBe(600);
+      expect(storageService.generatePresignedUploadUrl).toHaveBeenCalledWith({
+        key: result.objectKey,
+        contentType: 'application/pdf',
+        expiresInSeconds: 600,
+      });
       expect(chapterRepo.save).toHaveBeenCalled();
     });
 
-    it('should complete PDF upload and set contentStatus to READY', async () => {
+    it('should reject upload-url if chapter does not exist', async () => {
+      chapterRepo.findOne.mockResolvedValue(null);
+
+      await expect(
+        service.generateUploadUrl('non-existent-id', {
+          fileName: 'chapter-001.pdf',
+          fileSize: 15420000,
+          contentType: 'application/pdf',
+        }),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should reject upload-url if chapter is deleted', async () => {
+      chapterRepo.findOne.mockResolvedValue({
+        ...mockChapter,
+        deletedAt: new Date(),
+      });
+
+      await expect(
+        service.generateUploadUrl(mockChapter.id!, {
+          fileName: 'chapter-001.pdf',
+          fileSize: 15420000,
+          contentType: 'application/pdf',
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should reject upload-url for non-PDF content type', async () => {
+      chapterRepo.findOne.mockResolvedValue({ ...mockChapter });
+
+      await expect(
+        service.generateUploadUrl(mockChapter.id!, {
+          fileName: 'malicious.exe',
+          fileSize: 15420000,
+          contentType: 'application/octet-stream',
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should reject upload-url for oversized PDF', async () => {
+      chapterRepo.findOne.mockResolvedValue({ ...mockChapter });
+
+      await expect(
+        service.generateUploadUrl(mockChapter.id!, {
+          fileName: 'huge.pdf',
+          fileSize: 300 * 1024 * 1024, // 300MB > 200MB
+          contentType: 'application/pdf',
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should complete PDF upload and verify S3 object via HeadObject', async () => {
+      const versionId = 'v0000000-0000-0000-0000-000000000001';
+      const objectKey = `chapters/${mockChapter.id}/versions/${versionId}/chapter.pdf`;
+
       chapterRepo.findOne.mockResolvedValue({
         ...mockChapter,
         contentStatus: ChapterContentStatus.PENDING,
       });
 
+      storageService.headObject.mockResolvedValue({
+        ContentType: 'application/pdf',
+        ContentLength: 15420000,
+      });
+
       const result = await service.completePdfUpload(mockChapter.id!, {
+        objectKey,
+        versionId,
         fileName: 'chapter-001.pdf',
         fileSize: 15420000,
         pageCount: 47,
         checksum: 'checksum123',
       });
 
+      expect(storageService.headObject).toHaveBeenCalledWith(objectKey);
       expect(result.contentStatus).toBe(ChapterContentStatus.READY);
+      expect(result.pdfStorageKey).toBe(objectKey);
+      expect(result.pdfFileSize).toBe(15420000);
       expect(result.pdfPageCount).toBe(47);
       expect(chapterRepo.save).toHaveBeenCalled();
+    });
+
+    it('should reject complete if S3 object does not belong to chapter', async () => {
+      chapterRepo.findOne.mockResolvedValue({ ...mockChapter });
+
+      await expect(
+        service.completePdfUpload(mockChapter.id!, {
+          objectKey: 'chapters/different-chapter-id/versions/v1/chapter.pdf',
+          fileName: 'chapter-001.pdf',
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should reject complete if S3 HeadObject returns 404/NotFound', async () => {
+      const objectKey = `chapters/${mockChapter.id}/versions/v1/chapter.pdf`;
+      chapterRepo.findOne.mockResolvedValue({ ...mockChapter });
+
+      const notFoundError: any = new Error('NotFound');
+      notFoundError.name = 'NotFound';
+      storageService.headObject.mockRejectedValue(notFoundError);
+
+      await expect(
+        service.completePdfUpload(mockChapter.id!, {
+          objectKey,
+          fileName: 'chapter-001.pdf',
+        }),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should reject complete if S3 object ContentType is not application/pdf', async () => {
+      const objectKey = `chapters/${mockChapter.id}/versions/v1/chapter.pdf`;
+      chapterRepo.findOne.mockResolvedValue({ ...mockChapter });
+
+      storageService.headObject.mockResolvedValue({
+        ContentType: 'image/png',
+        ContentLength: 500000,
+      });
+
+      await expect(
+        service.completePdfUpload(mockChapter.id!, {
+          objectKey,
+          fileName: 'chapter-001.pdf',
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should reject complete if verified S3 object size exceeds limit', async () => {
+      const objectKey = `chapters/${mockChapter.id}/versions/v1/chapter.pdf`;
+      chapterRepo.findOne.mockResolvedValue({ ...mockChapter });
+
+      storageService.headObject.mockResolvedValue({
+        ContentType: 'application/pdf',
+        ContentLength: 250 * 1024 * 1024, // 250MB
+      });
+
+      await expect(
+        service.completePdfUpload(mockChapter.id!, {
+          objectKey,
+          fileName: 'chapter-001.pdf',
+        }),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 

@@ -12,11 +12,15 @@ import { ChapterPricingModel } from '../../common/enums/chapter-pricing-model.en
 import { ChapterContentStatus } from '../../common/enums/chapter-content-status.enum';
 import { RoleType } from '../../common/enums/role.enum';
 import type { JwtUser } from '../../auth/interfaces/jwt-user.interface';
+import { randomUUID } from 'node:crypto';
+import { StorageService } from '../../storage/storage.service';
 import {
   CreateChapterDto,
   UpdateChapterDto,
   QueryChapterDto,
   PaginatedChapterResponseDto,
+  ChapterPdfUploadUrlDto,
+  ChapterPdfUploadUrlResponseDto,
   ChapterPdfUploadInitDto,
   ChapterPdfUploadInitResponseDto,
   ChapterPdfUploadCompleteDto,
@@ -29,6 +33,7 @@ export class ChaptersService {
     private readonly chapterRepository: Repository<Chapter>,
     @InjectRepository(Book)
     private readonly bookRepository: Repository<Book>,
+    private readonly storageService: StorageService,
   ) {}
 
   private isAdminUser(user?: JwtUser): boolean {
@@ -423,25 +428,53 @@ export class ChaptersService {
   }
 
   /**
-   * POST /chapters/:id/content/upload-init
-   * Prepares direct upload for chapter PDF asset
+   * POST /chapters/:id/content/upload-url
+   * Generates a short-lived presigned PUT URL for direct browser -> S3 upload.
+   * Object key follows: chapters/{chapterId}/versions/{versionId}/chapter.pdf
    */
-  async initPdfUpload(
+  async generateUploadUrl(
     chapterId: string,
-    dto: ChapterPdfUploadInitDto,
-  ): Promise<ChapterPdfUploadInitResponseDto> {
+    dto: ChapterPdfUploadUrlDto,
+  ): Promise<ChapterPdfUploadUrlResponseDto> {
     const chapter = await this.chapterRepository.findOne({
       where: { id: chapterId },
     });
 
     if (!chapter) {
-      throw new NotFoundException(`Chapter "${chapterId}" not found`);
+      throw new NotFoundException(`Chapter with ID "${chapterId}" not found`);
     }
 
-    // Deterministic storage key
-    const storageKey = `books/${chapter.bookId}/chapters/${chapter.id}/chapter.pdf`;
+    if (chapter.deletedAt) {
+      throw new BadRequestException('Cannot upload content for a deleted chapter');
+    }
 
-    chapter.pdfStorageKey = storageKey;
+    const contentType = dto.contentType || dto.mimeType || 'application/pdf';
+    if (contentType.toLowerCase() !== 'application/pdf') {
+      throw new BadRequestException('Only PDF files (application/pdf) are supported');
+    }
+
+    if (dto.fileSize <= 0) {
+      throw new BadRequestException('File size must be greater than 0');
+    }
+
+    const maxSizeBytes = this.storageService.getMaxFileSizeBytes();
+    if (dto.fileSize > maxSizeBytes) {
+      throw new BadRequestException(
+        `File size exceeds maximum allowed limit of ${this.storageService.getMaxFileSizeMb()}MB`,
+      );
+    }
+
+    const uploadId = randomUUID();
+    const versionId = randomUUID();
+    const objectKey = `chapters/${chapter.id}/versions/${versionId}/chapter.pdf`;
+
+    const uploadUrl = await this.storageService.generatePresignedUploadUrl({
+      key: objectKey,
+      contentType: 'application/pdf',
+      expiresInSeconds: 600,
+    });
+
+    chapter.pdfStorageKey = objectKey;
     chapter.pdfFileName = dto.fileName.trim();
     chapter.pdfFileSize = dto.fileSize;
     chapter.contentStatus = ChapterContentStatus.PENDING;
@@ -449,16 +482,31 @@ export class ChaptersService {
     await this.chapterRepository.save(chapter);
 
     return {
+      uploadId,
       chapterId: chapter.id,
-      storageKey,
-      uploadUrl: `https://storage.kuroyomi.local/upload/${encodeURIComponent(storageKey)}?signature=mock_presigned_v1`,
-      expiresInSeconds: 3600,
+      versionId,
+      objectKey,
+      storageKey: objectKey,
+      uploadUrl,
+      expiresIn: 600,
+      expiresInSeconds: 600,
     };
   }
 
   /**
+   * POST /chapters/:id/content/upload-init
+   * Backward-compatible alias for generateUploadUrl
+   */
+  async initPdfUpload(
+    chapterId: string,
+    dto: ChapterPdfUploadInitDto,
+  ): Promise<ChapterPdfUploadInitResponseDto> {
+    return this.generateUploadUrl(chapterId, dto);
+  }
+
+  /**
    * POST /chapters/:id/content/complete
-   * Finalizes PDF metadata after direct browser upload to storage
+   * Verifies the uploaded S3 object using HeadObject and updates Chapter metadata.
    */
   async completePdfUpload(
     chapterId: string,
@@ -469,11 +517,77 @@ export class ChaptersService {
     });
 
     if (!chapter) {
-      throw new NotFoundException(`Chapter "${chapterId}" not found`);
+      throw new NotFoundException(`Chapter with ID "${chapterId}" not found`);
     }
 
-    chapter.pdfFileName = dto.fileName.trim();
-    chapter.pdfFileSize = dto.fileSize;
+    if (chapter.deletedAt) {
+      throw new BadRequestException('Cannot complete upload for a deleted chapter');
+    }
+
+    const objectKey = dto.objectKey || dto.storageKey || chapter.pdfStorageKey;
+    if (!objectKey) {
+      throw new BadRequestException('Missing objectKey for verification');
+    }
+
+    // Validate objectKey relationship to chapter
+    const expectedPrefix = `chapters/${chapter.id}/`;
+    const legacyPrefix = `books/${chapter.bookId}/chapters/${chapter.id}/`;
+    if (!objectKey.startsWith(expectedPrefix) && !objectKey.startsWith(legacyPrefix)) {
+      throw new BadRequestException(
+        `Object key "${objectKey}" does not belong to chapter "${chapter.id}"`,
+      );
+    }
+
+    if (dto.versionId && !objectKey.includes(dto.versionId)) {
+      throw new BadRequestException(
+        `Object key does not match versionId "${dto.versionId}"`,
+      );
+    }
+
+    // Verify S3 object directly using HeadObject
+    let s3Head;
+    try {
+      s3Head = await this.storageService.headObject(objectKey);
+    } catch (error: any) {
+      if (
+        error.name === 'NotFound' ||
+        error.name === 'NoSuchKey' ||
+        error.$metadata?.httpStatusCode === 404
+      ) {
+        throw new NotFoundException(
+          'S3 object not found or upload has not completed yet',
+        );
+      }
+      throw new BadRequestException(
+        `Failed to verify S3 object: ${error.message || 'Unknown S3 error'}`,
+      );
+    }
+
+    // Verify Content-Type is application/pdf
+    if (
+      s3Head.ContentType &&
+      s3Head.ContentType.toLowerCase() !== 'application/pdf'
+    ) {
+      throw new BadRequestException(
+        `Invalid S3 object Content-Type "${s3Head.ContentType}". Expected "application/pdf"`,
+      );
+    }
+
+    // Verify object size is within configured maximum
+    const verifiedSize = s3Head.ContentLength ?? dto.fileSize ?? chapter.pdfFileSize;
+    const maxSizeBytes = this.storageService.getMaxFileSizeBytes();
+    if (verifiedSize !== undefined && verifiedSize > maxSizeBytes) {
+      throw new BadRequestException(
+        `Verified S3 object size (${verifiedSize} bytes) exceeds maximum allowed limit of ${this.storageService.getMaxFileSizeMb()}MB`,
+      );
+    }
+
+    // Update Chapter PDF metadata
+    chapter.pdfStorageKey = objectKey;
+    chapter.pdfFileName = dto.fileName
+      ? dto.fileName.trim()
+      : chapter.pdfFileName || 'chapter.pdf';
+    chapter.pdfFileSize = verifiedSize;
     if (dto.pageCount !== undefined) chapter.pdfPageCount = dto.pageCount;
     if (dto.checksum !== undefined) chapter.pdfChecksum = dto.checksum;
     chapter.contentStatus = ChapterContentStatus.READY;

@@ -3,6 +3,7 @@ import databaseConfig from './database.config';
 import jwtConfig from './jwt.config';
 import mailConfig from './mail.config';
 import paymentConfig from './payment.config';
+import awsConfig from './aws.config';
 
 export default [
   appConfig,
@@ -10,4 +11,5 @@ export default [
   jwtConfig,
   mailConfig,
   paymentConfig,
+  awsConfig,
 ];
