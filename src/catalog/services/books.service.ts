@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -26,11 +27,40 @@ import {
   UpdateBookDto,
   QueryBookDto,
   PaginatedBookResponseDto,
+  BookCoverUploadUrlDto,
+  BookCoverUploadUrlResponseDto,
+  BookCoverCompleteDto,
+  ALLOWED_COVER_CONTENT_TYPES,
 } from '../dto';
 import { generateSlug } from './series.service';
+import { StorageService } from '../../storage/storage.service';
+
+const COVER_URL_TTL_SECONDS = 3600;
+const COVER_UPLOAD_TTL_SECONDS = 600;
+
+function detectImageType(head: Buffer): string | null {
+  if (head.length >= 3 && head[0] === 0xff && head[1] === 0xd8 && head[2] === 0xff)
+    return 'image/jpeg';
+  if (
+    head.length >= 8 &&
+    head.subarray(0, 8).equals(
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    )
+  )
+    return 'image/png';
+  if (
+    head.length >= 12 &&
+    head.subarray(0, 4).toString('ascii') === 'RIFF' &&
+    head.subarray(8, 12).toString('ascii') === 'WEBP'
+  )
+    return 'image/webp';
+  return null;
+}
 
 @Injectable()
 export class BooksService {
+  private readonly logger = new Logger(BooksService.name);
+
   constructor(
     @InjectRepository(Book)
     private readonly bookRepository: Repository<Book>,
@@ -54,7 +84,150 @@ export class BooksService {
     private readonly bookGenreRepository: Repository<BookGenre>,
     @InjectRepository(BookTag)
     private readonly bookTagRepository: Repository<BookTag>,
+    private readonly storageService: StorageService,
   ) {}
+
+  /** Stable, server-generated key (no client input, no per-replace versioning). */
+  private coverKey(bookId: string): string {
+    return `books/${bookId}/cover/cover`;
+  }
+
+  /** Converts the stored key into a temporary presigned GET URL. */
+  private async withCoverUrl<T extends Book>(book: T): Promise<T> {
+    if (book && book.coverStorageKey) {
+      try {
+        book.coverUrl = await this.storageService.generatePresignedDownloadUrl(
+          book.coverStorageKey,
+          COVER_URL_TTL_SECONDS,
+        );
+      } catch (error) {
+        this.logger.warn(`Failed to sign cover URL for book ${book.id}`);
+        book.coverUrl = null;
+      }
+    }
+    return book;
+  }
+
+  private async getEditableBook(bookId: string): Promise<Book> {
+    const book = this.isUUID(bookId)
+      ? await this.bookRepository.findOne({ where: { id: bookId } })
+      : null;
+    if (!book || book.deletedAt) {
+      throw new NotFoundException(`Book "${bookId}" not found`);
+    }
+    return book;
+  }
+
+  /**
+   * POST /books/:bookId/cover/upload-url (ADMIN)
+   */
+  async createCoverUploadUrl(
+    bookId: string,
+    dto: BookCoverUploadUrlDto,
+  ): Promise<BookCoverUploadUrlResponseDto> {
+    const book = await this.getEditableBook(bookId);
+
+    const contentType = dto.contentType?.toLowerCase();
+    if (!(ALLOWED_COVER_CONTENT_TYPES as readonly string[]).includes(contentType)) {
+      throw new BadRequestException(
+        'Unsupported image type. Allowed: JPEG, PNG, WebP',
+      );
+    }
+    if (dto.fileSize <= 0) {
+      throw new BadRequestException('File size must be greater than 0');
+    }
+    if (dto.fileSize > this.storageService.getMaxBookCoverSizeBytes()) {
+      throw new BadRequestException(
+        `Cover image exceeds maximum allowed size of ${this.storageService.getMaxBookCoverSizeMb()}MB`,
+      );
+    }
+
+    const objectKey = this.coverKey(book.id);
+    const uploadUrl = await this.storageService.generatePresignedUploadUrl({
+      key: objectKey,
+      contentType,
+      expiresInSeconds: COVER_UPLOAD_TTL_SECONDS,
+    });
+
+    return {
+      bookId: book.id,
+      objectKey,
+      uploadUrl,
+      contentType,
+      expiresIn: COVER_UPLOAD_TTL_SECONDS,
+    };
+  }
+
+  /**
+   * POST /books/:bookId/cover/complete (ADMIN)
+   * Verifies the S3 object (HeadObject + magic bytes) and stores metadata only.
+   */
+  async completeCoverUpload(
+    bookId: string,
+    dto: BookCoverCompleteDto,
+    user?: JwtUser,
+  ): Promise<Book> {
+    const book = await this.getEditableBook(bookId);
+    const objectKey = this.coverKey(book.id);
+
+    let head;
+    try {
+      head = await this.storageService.headObject(objectKey);
+    } catch (error: any) {
+      if (
+        error?.name === 'NotFound' ||
+        error?.name === 'NoSuchKey' ||
+        error?.$metadata?.httpStatusCode === 404
+      ) {
+        throw new NotFoundException(
+          'Cover image not found in storage. Upload may not have completed.',
+        );
+      }
+      this.logger.error(`HeadObject failed for ${objectKey}: ${error?.name}`);
+      throw new BadRequestException('Failed to verify uploaded cover image');
+    }
+
+    const contentType = (head.ContentType || '').toLowerCase();
+    if (!(ALLOWED_COVER_CONTENT_TYPES as readonly string[]).includes(contentType)) {
+      throw new BadRequestException(
+        `Invalid cover content type "${head.ContentType}"`,
+      );
+    }
+
+    const size = head.ContentLength ?? 0;
+    if (size <= 0) {
+      throw new BadRequestException('Uploaded cover image is empty');
+    }
+    if (size > this.storageService.getMaxBookCoverSizeBytes()) {
+      throw new BadRequestException(
+        `Cover image exceeds maximum allowed size of ${this.storageService.getMaxBookCoverSizeMb()}MB`,
+      );
+    }
+
+    // Do not trust the declared MIME type: verify actual bytes.
+    let detected: string | null = null;
+    try {
+      detected = detectImageType(await this.storageService.getObjectHead(objectKey));
+    } catch (error: any) {
+      this.logger.error(`Content sniff failed for ${objectKey}: ${error?.name}`);
+      throw new BadRequestException('Failed to verify cover image content');
+    }
+    if (detected !== contentType) {
+      throw new BadRequestException(
+        'Uploaded file is not a valid image of the declared type',
+      );
+    }
+
+    book.coverStorageKey = objectKey;
+    book.coverFileName = dto.fileName.trim().slice(0, 255);
+    book.coverFileSize = size;
+    book.coverContentType = contentType;
+    book.coverEtag = head.ETag ? head.ETag.replace(/"/g, '') : null;
+    book.updatedBy = user?.userId ?? book.updatedBy;
+    await this.bookRepository.save(book);
+
+    return this.findOne(book.id, user);
+  }
 
   private isAdminUser(user?: JwtUser): boolean {
     if (!user || !user.roles) return false;
@@ -250,7 +423,7 @@ export class BooksService {
       await this.bookTagRepository.save(bookTags);
     }
 
-    return this.findOne(savedBook.id, user);
+    return this.withCoverUrl(await this.findOne(savedBook.id, user));
   }
 
   /**
@@ -374,6 +547,7 @@ export class BooksService {
 
     const [data, total] = await qb.getManyAndCount();
     const totalPages = Math.ceil(total / limit);
+    await Promise.all(data.map((b) => this.withCoverUrl(b)));
 
     return {
       data,
@@ -427,7 +601,7 @@ export class BooksService {
       throw new NotFoundException(`Book "${idOrSlug}" not found`);
     }
 
-    return book;
+    return this.withCoverUrl(book);
   }
 
   /**

@@ -38,5 +38,6 @@ const validationSchema = Joi.object({
   AWS_REGION: Joi.string().default('ap-south-1'),
   AWS_S3_BUCKET: Joi.string().optional(),
   MAX_CHAPTER_PDF_SIZE_MB: Joi.number().default(200),
+  MAX_BOOK_COVER_SIZE_MB: Joi.number().default(10),
 });
 export default validationSchema;

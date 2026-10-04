@@ -20,6 +20,7 @@ import { BookTag } from '../entities/book-tag.entity';
 import { BookStatus } from '../../common/enums/book-status.enum';
 import { BookPricingModel } from '../../common/enums/book-pricing-model.enum';
 import { RoleType } from '../../common/enums/role.enum';
+import { StorageService } from '../../storage/storage.service';
 
 describe('BooksService', () => {
   let service: BooksService;
@@ -138,6 +139,21 @@ describe('BooksService', () => {
         { provide: getRepositoryToken(Tag), useValue: tagRepo },
         { provide: getRepositoryToken(BookGenre), useValue: bookGenreRepo },
         { provide: getRepositoryToken(BookTag), useValue: bookTagRepo },
+        {
+          provide: StorageService,
+          useValue: {
+            generatePresignedDownloadUrl: jest
+              .fn()
+              .mockResolvedValue('https://signed.example/cover'),
+            generatePresignedUploadUrl: jest
+              .fn()
+              .mockResolvedValue('https://signed.example/put'),
+            headObject: jest.fn(),
+            getObjectHead: jest.fn(),
+            getMaxBookCoverSizeBytes: jest.fn().mockReturnValue(10 * 1024 * 1024),
+            getMaxBookCoverSizeMb: jest.fn().mockReturnValue(10),
+          },
+        },
       ],
     }).compile();
 

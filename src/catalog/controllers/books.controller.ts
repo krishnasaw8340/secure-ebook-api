@@ -31,6 +31,9 @@ import {
   QueryBookDto,
   PaginatedBookResponseDto,
   BookItemDto,
+  BookCoverUploadUrlDto,
+  BookCoverUploadUrlResponseDto,
+  BookCoverCompleteDto,
 } from '../dto';
 
 @ApiTags('Books')
@@ -133,6 +136,44 @@ export class BooksController {
     @CurrentUser() user?: JwtUser,
   ) {
     return this.booksService.update(id, dto, user);
+  }
+
+  @Post(':bookId/cover/upload-url')
+  @HttpCode(HttpStatus.OK)
+  @Roles(RoleType.ADMIN, RoleType.SUPER_ADMIN)
+  @UseGuards(RolesGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Get presigned S3 PUT URL for the book cover (Admin only)',
+  })
+  @ApiResponse({ status: 200, type: BookCoverUploadUrlResponseDto })
+  @ApiResponse({ status: 400, description: 'Unsupported type or too large.' })
+  @ApiResponse({ status: 403, description: 'Forbidden.' })
+  @ApiResponse({ status: 404, description: 'Book not found.' })
+  createCoverUploadUrl(
+    @Param('bookId') bookId: string,
+    @Body() dto: BookCoverUploadUrlDto,
+  ) {
+    return this.booksService.createCoverUploadUrl(bookId, dto);
+  }
+
+  @Post(':bookId/cover/complete')
+  @HttpCode(HttpStatus.OK)
+  @Roles(RoleType.ADMIN, RoleType.SUPER_ADMIN)
+  @UseGuards(RolesGuard)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary: 'Verify uploaded cover in S3 and store metadata (Admin only)',
+  })
+  @ApiResponse({ status: 200, type: BookItemDto })
+  @ApiResponse({ status: 403, description: 'Forbidden.' })
+  @ApiResponse({ status: 404, description: 'Book or S3 object not found.' })
+  completeCoverUpload(
+    @Param('bookId') bookId: string,
+    @Body() dto: BookCoverCompleteDto,
+    @CurrentUser() user?: JwtUser,
+  ) {
+    return this.booksService.completeCoverUpload(bookId, dto, user);
   }
 
   @Delete(':id')

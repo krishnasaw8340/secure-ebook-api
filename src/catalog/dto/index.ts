@@ -10,6 +10,7 @@ export * from './create-book.dto';
 export * from './update-book.dto';
 export * from './query-book.dto';
 export * from './book-response.dto';
+export * from './book-cover.dto';
 export * from './create-chapter.dto';
 export * from './update-chapter.dto';
 export * from './query-chapter.dto';

@@ -230,6 +230,55 @@ export class Book extends BaseEntity {
   releaseDate?: Date;
 
   @Column({
+    name: 'cover_storage_key',
+    type: 'varchar',
+    length: 500,
+    nullable: true,
+  })
+  coverStorageKey?: string | null;
+
+  @Column({
+    name: 'cover_file_name',
+    type: 'varchar',
+    length: 255,
+    nullable: true,
+  })
+  coverFileName?: string | null;
+
+  @Column({
+    name: 'cover_file_size',
+    type: 'bigint',
+    nullable: true,
+    transformer: {
+      to: (value?: number | null) => value,
+      from: (value?: string | number | null) =>
+        value !== null && value !== undefined
+          ? parseInt(value.toString(), 10)
+          : null,
+    },
+  })
+  coverFileSize?: number | null;
+
+  @Column({
+    name: 'cover_content_type',
+    type: 'varchar',
+    length: 100,
+    nullable: true,
+  })
+  coverContentType?: string | null;
+
+  @Column({
+    name: 'cover_etag',
+    type: 'varchar',
+    length: 128,
+    nullable: true,
+  })
+  coverEtag?: string | null;
+
+  /** Transient: short-lived presigned GET URL, never persisted. */
+  coverUrl?: string | null;
+
+  @Column({
     name: 'published_at',
     type: 'timestamptz',
     nullable: true,

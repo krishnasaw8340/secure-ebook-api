@@ -85,6 +85,20 @@ export class BookItemDto {
   @ApiPropertyOptional({ example: '1997-12-24' })
   releaseDate?: Date;
 
+  @ApiPropertyOptional({
+    description: 'Short-lived presigned GET URL for the cover image',
+  })
+  coverUrl?: string | null;
+
+  @ApiPropertyOptional({ example: 'the-last-ember-cover.jpg' })
+  coverFileName?: string | null;
+
+  @ApiPropertyOptional({ example: 245678 })
+  coverFileSize?: number | null;
+
+  @ApiPropertyOptional({ example: 'image/jpeg' })
+  coverContentType?: string | null;
+
   @ApiPropertyOptional({ example: '2026-09-20T00:00:00.000Z' })
   publishedAt?: Date;
 

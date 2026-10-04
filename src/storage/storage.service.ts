@@ -6,6 +6,7 @@ import {
   HeadObjectCommand,
   HeadObjectCommandOutput,
   DeleteObjectCommand,
+  GetObjectCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
@@ -22,6 +23,7 @@ export class StorageService implements OnModuleInit {
   private bucket: string;
   private region: string;
   private maxFileSizeMb: number;
+  private maxBookCoverSizeMb: number;
 
   constructor(private readonly configService: ConfigService) {}
 
@@ -40,6 +42,12 @@ export class StorageService implements OnModuleInit {
       this.configService.get<number>('aws.maxChapterPdfSizeMb') ||
         this.configService.get<number>('MAX_CHAPTER_PDF_SIZE_MB') ||
         200,
+    );
+
+    this.maxBookCoverSizeMb = Number(
+      this.configService.get<number>('aws.maxBookCoverSizeMb') ||
+        this.configService.get<number>('MAX_BOOK_COVER_SIZE_MB') ||
+        10,
     );
 
     const accessKeyId =
@@ -80,6 +88,43 @@ export class StorageService implements OnModuleInit {
 
   getMaxFileSizeMb(): number {
     return this.maxFileSizeMb;
+  }
+
+  getMaxBookCoverSizeBytes(): number {
+    return this.maxBookCoverSizeMb * 1024 * 1024;
+  }
+
+  getMaxBookCoverSizeMb(): number {
+    return this.maxBookCoverSizeMb;
+  }
+
+  /**
+   * Generates a short-lived presigned GET URL for a private object.
+   */
+  async generatePresignedDownloadUrl(
+    key: string,
+    expiresInSeconds = 3600,
+  ): Promise<string> {
+    const command = new GetObjectCommand({ Bucket: this.bucket, Key: key });
+    return getSignedUrl(this.s3Client, command, {
+      expiresIn: expiresInSeconds,
+    });
+  }
+
+  /**
+   * Reads the first bytes of an object (for magic-byte content verification).
+   */
+  async getObjectHead(key: string, bytes = 16): Promise<Buffer> {
+    const res = await this.s3Client.send(
+      new GetObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+        Range: `bytes=0-${bytes - 1}`,
+      }),
+    );
+    const body = res.Body as { transformToByteArray?: () => Promise<Uint8Array> };
+    const arr = await body.transformToByteArray!();
+    return Buffer.from(arr);
   }
 
   /**
