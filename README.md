@@ -36,12 +36,13 @@
    - [6.2 User Profile Management](#62-user-profile-management)
    - [6.3 Series Catalog Management](#63-series-catalog-management)
    - [6.4 Volume Catalog Management](#64-volume-catalog-management)
-   - [6.5 Book Catalog Management](#65-book-catalog-management)
-   - [6.6 Chapter Catalog Management](#66-chapter-catalog-management)
-7. [📧 Transactional Email & Notification System](#-transactional-email--notification-system)
-8. [🧪 Testing & Code Quality Assurance](#-testing--code-quality-assurance)
-9. [🗺️ Master Project Roadmap & Milestone Tracker (Phases 1–12)](#️-master-project-roadmap--milestone-tracker-phases-112)
-10. [📦 Tech Stack Matrix](#-tech-stack-matrix)
+   - [6.5 Book Catalog Management & S3 Covers](#65-book-catalog-management)
+   - [6.6 Chapter Catalog Management & S3 PDF Streaming](#66-chapter-catalog-management--s3-pdf-streaming)
+7. [☁️ AWS S3 Storage & Secure Media Architecture](#️-aws-s3-storage--secure-media-architecture)
+8. [📧 Transactional Email & Notification System](#-transactional-email--notification-system)
+9. [🧪 Testing & Code Quality Assurance](#-testing--code-quality-assurance)
+10. [🗺️ Master Project Roadmap & Milestone Tracker (Phases 1–12)](#️-master-project-roadmap--milestone-tracker-phases-112)
+11. [📦 Tech Stack Matrix](#-tech-stack-matrix)
 
 ---
 
@@ -72,6 +73,7 @@ graph TD
     AppModule --> ConfigModule
     AppModule --> DatabaseModule
     AppModule --> CommonModule
+    AppModule --> StorageModule
     AppModule --> AuthModule
     AppModule --> UserModule
     AppModule --> CatalogModule
@@ -81,6 +83,7 @@ graph TD
 
     AuthModule --> UserModule
     AuthModule --> CommonModule
+    CatalogModule --> StorageModule
     CommonModule --> MailService
     DatabaseModule --> TypeOrmModule
 ```
@@ -89,7 +92,8 @@ graph TD
 | :--- | :--- |
 | **`AuthModule`** | Manages registration, OTPs, bcrypt hashing, JWT issuance, refresh token rotation, password recovery, and auth guards. |
 | **`UserModule`** | Manages user accounts, profile queries, role assignment, and user status lifecycles. |
-| **`CatalogModule`** | Domain entities for manga/ebook series, volumes, chapters, and pages. |
+| **`CatalogModule`** | Domain entities for manga/ebook series, volumes, books, and chapters with PDF content. |
+| **`StorageModule`** | AWS S3 presigned PUT URL generation, HeadObject verification, magic-byte detection, and presigned GET streaming URLs. |
 | **`ReadingModule`** | Handles user libraries, reading progress sync, bookmarks, and chapter access logs. |
 | **`WalletModule`** | Manages virtual coin balances, packages, unlocking fees, and transaction ledgers. |
 | **`PaymentModule`** | Integrations with payment gateways (Razorpay / Stripe) and order processing. |
@@ -970,6 +974,14 @@ MAIL_FROM="Kuroyomi Ebook <your-email@gmail.com>"
 # Payment Gateways (Optional for Phase 1 & 2)
 RAZORPAY_KEY=
 RAZORPAY_SECRET=
+
+# AWS S3 Storage (Direct Browser Presigned Uploads & Secure Streaming)
+AWS_ACCESS_KEY_ID=your_aws_access_key_id
+AWS_SECRET_ACCESS_KEY=your_aws_secret_access_key
+AWS_REGION=ap-south-1
+AWS_S3_BUCKET=ebook-platform-pdfs-prod
+MAX_CHAPTER_PDF_SIZE_MB=200
+MAX_BOOK_COVER_SIZE_MB=10
 ```
 
 ---
@@ -1692,9 +1704,50 @@ Soft-deletes a book by setting `deleted_at` timestamp (Admin only).
 
 ---
 
-### 6.6 Chapter Catalog Management
+#### 28. Generate Book Cover Upload URL
+Generates a short-lived presigned AWS S3 `PUT` URL for direct browser-to-S3 book cover image upload (Admin only).
 
-#### 28. Create Chapter
+- **Endpoint**: `POST /api/books/:bookId/cover/upload-url`
+- **Access**: Protected (`Roles: ADMIN, SUPER_ADMIN`)
+- **HTTP Status**: `200 OK`
+- **Allowed Formats**: JPEG, PNG, WebP (Max size configured via `MAX_BOOK_COVER_SIZE_MB`, default 10MB)
+
+##### Request Body
+```json
+{
+  "contentType": "image/png",
+  "fileSize": 1048576
+}
+```
+
+##### Response (`200 OK`)
+```json
+{
+  "bookId": "e0000000-0000-0000-0000-000000000001",
+  "objectKey": "books/e0000000-0000-0000-0000-000000000001/cover/cover",
+  "uploadUrl": "https://ebook-platform-pdfs-prod.s3.ap-south-1.amazonaws.com/books/.../cover/cover?...",
+  "contentType": "image/png",
+  "expiresIn": 600
+}
+```
+
+---
+
+#### 29. Complete Book Cover Upload
+Verifies the uploaded cover file in AWS S3 (via S3 `HeadObject` and binary magic-byte detection) and updates the book record (Admin only).
+
+- **Endpoint**: `POST /api/books/:bookId/cover/complete`
+- **Access**: Protected (`Roles: ADMIN, SUPER_ADMIN`)
+- **HTTP Status**: `200 OK`
+
+##### Response (`200 OK`)
+Returns the updated Book object with `coverImageUrl` (presigned GET URL) populated.
+
+---
+
+### 6.6 Chapter Catalog Management & S3 PDF Streaming
+
+#### 30. Create Chapter
 Creates a new chapter for a book with monetization pricing model, sort order, and page metadata (Admin only).
 
 - **Endpoint**: `POST /api/chapters`
@@ -1716,7 +1769,6 @@ curl -X POST http://localhost:3000/api/chapters \
     "title": "Romance Dawn — Dawn of the Adventure",
     "sortOrder": 10,
     "pricingModel": "FREE",
-    "pageCount": 24,
     "published": true
   }'
 ```
@@ -1732,7 +1784,7 @@ curl -X POST http://localhost:3000/api/chapters \
   "pricingModel": "FREE",
   "freePageCount": 0,
   "coinCost": 0,
-  "pageCount": 24,
+  "contentStatus": "PENDING",
   "published": true,
   "publishedAt": "2026-09-20T00:00:00.000Z",
   "createdAt": "2026-09-20T00:00:00.000Z",
@@ -1742,7 +1794,7 @@ curl -X POST http://localhost:3000/api/chapters \
 
 ---
 
-#### 29. List Chapters
+#### 31. List Chapters
 Retrieves a paginated list of chapters ordered by `sortOrder ASC`. Public users strictly receive `published: true` chapters.
 
 - **Endpoint**: `GET /api/chapters`
@@ -1758,45 +1810,9 @@ Retrieves a paginated list of chapters ordered by `sortOrder ASC`. Public users 
   - `sortBy` *(optional, default: 'sortOrder')*: `chapterNumber | sortOrder | createdAt | title`.
   - `sortOrder` *(optional, default: 'ASC')*: `ASC | DESC`.
 
-##### cURL Request
-```bash
-curl -X GET "http://localhost:3000/api/chapters?bookId=e0000000-0000-0000-0000-000000000001&page=1&limit=20"
-```
-
-##### JSON Response (`200 OK`)
-```json
-{
-  "data": [
-    {
-      "id": "c0000000-0000-0000-0000-000000000001",
-      "bookId": "e0000000-0000-0000-0000-000000000001",
-      "chapterNumber": 1.0,
-      "title": "Romance Dawn — Dawn of the Adventure",
-      "sortOrder": 10,
-      "pricingModel": "FREE",
-      "freePageCount": 0,
-      "coinCost": 0,
-      "pageCount": 24,
-      "published": true,
-      "publishedAt": "2026-09-20T00:00:00.000Z",
-      "createdAt": "2026-09-20T00:00:00.000Z",
-      "updatedAt": "2026-09-20T00:00:00.000Z"
-    }
-  ],
-  "meta": {
-    "total": 1,
-    "page": 1,
-    "limit": 20,
-    "totalPages": 1,
-    "hasNextPage": false,
-    "hasPrevPage": false
-  }
-}
-```
-
 ---
 
-#### 30. Get Chapter by ID
+#### 32. Get Chapter by ID
 Fetches a single chapter by UUID with joined parent book relation.
 
 - **Endpoint**: `GET /api/chapters/:id`
@@ -1805,7 +1821,7 @@ Fetches a single chapter by UUID with joined parent book relation.
 
 ---
 
-#### 31. Update Chapter
+#### 33. Update Chapter
 Updates chapter details, pricing model, coin cost, or publication status (Admin only).
 
 - **Endpoint**: `PATCH /api/chapters/:id`
@@ -1814,12 +1830,97 @@ Updates chapter details, pricing model, coin cost, or publication status (Admin 
 
 ---
 
-#### 32. Delete Chapter
+#### 34. Delete Chapter
 Soft-deletes a chapter by setting `deleted_at` timestamp and automatically syncs the book's `totalChapters` counter (Admin only).
 
 - **Endpoint**: `DELETE /api/chapters/:id`
 - **Access**: Protected (`Roles: ADMIN, SUPER_ADMIN`)
 - **HTTP Status**: `200 OK`
+
+---
+
+#### 35. Generate Chapter PDF Upload URL
+Generates a direct browser-to-S3 presigned `PUT` upload URL for a chapter's PDF file (Admin only).
+
+- **Endpoint**: `POST /api/chapters/:id/content/upload-url` *(also available at `/api/admin/chapters/:id/content/upload-url`)*
+- **Access**: Protected (`Roles: ADMIN, SUPER_ADMIN`)
+- **HTTP Status**: `200 OK`
+
+##### Request Body
+```json
+{
+  "fileSize": 15728640,
+  "fileName": "chapter_01.pdf",
+  "mimeType": "application/pdf"
+}
+```
+
+##### Response (`200 OK`)
+```json
+{
+  "uploadUrl": "https://ebook-platform-pdfs-prod.s3.ap-south-1.amazonaws.com/chapters/c0000000.../versions/.../chapter.pdf?...",
+  "objectKey": "chapters/c0000000-0000-0000-0000-000000000001/versions/v0000000-0000-0000-0000-000000000001/chapter.pdf",
+  "uploadId": "u0000000-0000-0000-0000-000000000001",
+  "versionId": "v0000000-0000-0000-0000-000000000001",
+  "expiresIn": 600
+}
+```
+
+---
+
+#### 36. Complete Chapter PDF Upload
+Validates the uploaded PDF in S3 (`HeadObject` and PDF magic bytes `%PDF`), verifies file size, updates `contentStatus: "READY"`, and increments book chapter/page counters (Admin only).
+
+- **Endpoint**: `POST /api/chapters/:id/content/complete` *(also available at `/api/admin/chapters/:id/content/complete`)*
+- **Access**: Protected (`Roles: ADMIN, SUPER_ADMIN`)
+- **HTTP Status**: `200 OK`
+
+##### Request Body
+```json
+{
+  "objectKey": "chapters/c0000000-0000-0000-0000-000000000001/versions/v0000000-0000-0000-0000-000000000001/chapter.pdf",
+  "fileName": "chapter_01.pdf",
+  "fileSize": 15728640,
+  "pageCount": 28
+}
+```
+
+---
+
+#### 37. Get Authorized Chapter Reader Access URL
+Generates a short-lived, secure presigned AWS S3 download/streaming URL for the chapter PDF. Validates chapter unlock status, free pricing model, or user coin purchases before granting access.
+
+- **Endpoint**: `GET /api/chapters/:id/access`
+- **Access**: Authenticated (`JwtAuthGuard`)
+- **HTTP Status**: `200 OK`
+
+##### Response (`200 OK`)
+```json
+{
+  "chapterId": "c0000000-0000-0000-0000-000000000001",
+  "bookId": "e0000000-0000-0000-0000-000000000001",
+  "title": "Romance Dawn — Dawn of the Adventure",
+  "chapterNumber": 1.0,
+  "pageCount": 28,
+  "isUnlocked": true,
+  "streamUrl": "https://ebook-platform-pdfs-prod.s3.ap-south-1.amazonaws.com/chapters/c0000000.../chapter.pdf?AWSAccessKeyId=...&Signature=...",
+  "expiresIn": 3600
+}
+```
+
+---
+
+## ☁️ AWS S3 Storage & Secure Media Architecture
+
+All raw manga & comic PDFs and high-resolution cover images are securely stored in private AWS S3 buckets:
+
+1. **Direct Browser-to-S3 Uploads**: The frontend requests a presigned `PUT` URL and streams the raw binary file directly to S3, bypassing backend memory and CPU overhead.
+2. **Double Verification Barrier**:
+   - Backend performs `HeadObject` to verify existence, size, and Content-Type.
+   - Backend reads initial bytes to verify cryptographic **Magic Byte Signatures** (`%PDF` for PDFs, `0xFFD8FF` for JPEG, `\x89PNG` for PNG, `RIFF...WEBP` for WebP).
+3. **Zero Public S3 Exposure**: The S3 bucket remains strictly private with Block Public Access enabled. Readers access media exclusively through short-lived presigned URLs generated after token and entitlement validation.
+
+---
 
 
 ---
