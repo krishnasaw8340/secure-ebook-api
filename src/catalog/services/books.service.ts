@@ -94,7 +94,7 @@ export class BooksService {
 
   /** Stable, server-generated key (no client input, no per-replace versioning). */
   private coverKey(bookId: string): string {
-    return `books/${bookId}/cover/cover`;
+    return `chapters/books/${bookId}/cover/cover`;
   }
 
   /** Converts the stored key into a temporary presigned GET URL. */

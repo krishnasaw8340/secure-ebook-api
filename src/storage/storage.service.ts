@@ -61,8 +61,12 @@ export class StorageService implements OnModuleInit {
     const clientConfig: {
       region: string;
       credentials?: { accessKeyId: string; secretAccessKey: string };
+      requestChecksumCalculation?: any;
+      responseChecksumValidation?: any;
     } = {
       region: this.region,
+      requestChecksumCalculation: "WHEN_REQUIRED",
+      responseChecksumValidation: "WHEN_REQUIRED",
     };
 
     if (accessKeyId && secretAccessKey) {
@@ -108,6 +112,13 @@ export class StorageService implements OnModuleInit {
     const command = new GetObjectCommand({ Bucket: this.bucket, Key: key });
     return getSignedUrl(this.s3Client, command, {
       expiresIn: expiresInSeconds,
+      unhoistableHeaders: new Set([
+        "x-amz-checksum-crc32",
+        "x-amz-checksum-crc32c",
+        "x-amz-checksum-sha1",
+        "x-amz-checksum-sha256",
+        "x-amz-sdk-checksum-algorithm",
+      ]),
     });
   }
 
@@ -151,6 +162,13 @@ export class StorageService implements OnModuleInit {
 
     return getSignedUrl(this.s3Client, command, {
       expiresIn: expiresInSeconds,
+      unhoistableHeaders: new Set([
+        "x-amz-checksum-crc32",
+        "x-amz-checksum-crc32c",
+        "x-amz-checksum-sha1",
+        "x-amz-checksum-sha256",
+        "x-amz-sdk-checksum-algorithm",
+      ]),
     });
   }
 
