@@ -47,10 +47,11 @@ export class CatalogController {
   @Public()
   @Get('metadata')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Get all catalog metadata (languages, categories, genres, tags)' })
+  @ApiOperation({
+    summary: 'Get all catalog metadata (languages, categories, genres, tags)',
+  })
   @ApiResponse({ status: 200, description: 'All catalog metadata' })
   async getMetadata() {
     return this.catalogService.getMetadata();
   }
 }
-

@@ -101,6 +101,26 @@ describe('ChaptersController', () => {
     expect(res.id).toBe(mockChapter.id);
   });
 
+  it('GET /chapters/:id/access calls service.getChapterAccess', async () => {
+    const mockAccessResponse = {
+      chapterId: mockChapter.id,
+      bookId: mockChapter.bookId,
+      chapterNumber: mockChapter.chapterNumber,
+      title: mockChapter.title,
+      pdfUrl: 'https://storage-mock/chapter.pdf?token=123',
+      expiresIn: 600,
+      fileName: 'chapter-001.pdf',
+      fileSize: 15420000,
+    };
+    service.getChapterAccess = jest.fn().mockResolvedValue(mockAccessResponse);
+
+    const user = { userId: 'u1', email: 'user@example.com', roles: ['USER'] };
+    const res = await controller.getChapterAccess(mockChapter.id, user);
+    expect(service.getChapterAccess).toHaveBeenCalledWith(mockChapter.id, user);
+    expect(res.pdfUrl).toBe(mockAccessResponse.pdfUrl);
+    expect(res.expiresIn).toBe(600);
+  });
+
   it('PATCH /chapters/:id calls service.update', async () => {
     const dto = { title: 'Updated Romance Dawn' };
     const res = await controller.update(mockChapter.id, dto);

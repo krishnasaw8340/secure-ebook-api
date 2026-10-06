@@ -29,8 +29,12 @@ describe('BooksService - cover upload', () => {
       createQueryBuilder: jest.fn(),
     };
     storage = {
-      generatePresignedDownloadUrl: jest.fn().mockResolvedValue('https://signed/get'),
-      generatePresignedUploadUrl: jest.fn().mockResolvedValue('https://signed/put'),
+      generatePresignedDownloadUrl: jest
+        .fn()
+        .mockResolvedValue('https://signed/get'),
+      generatePresignedUploadUrl: jest
+        .fn()
+        .mockResolvedValue('https://signed/put'),
       headObject: jest.fn(),
       getObjectHead: jest.fn(),
       getMaxBookCoverSizeBytes: jest.fn().mockReturnValue(10 * 1024 * 1024),
@@ -41,9 +45,18 @@ describe('BooksService - cover upload', () => {
       providers: [
         BooksService,
         { provide: getRepositoryToken(Book), useValue: bookRepo },
-        ...[BookSeries, Volume, Author, Artist, Language, Category, Genre, Tag, BookGenre, BookTag].map(
-          (e) => ({ provide: getRepositoryToken(e), useValue: stub }),
-        ),
+        ...[
+          BookSeries,
+          Volume,
+          Author,
+          Artist,
+          Language,
+          Category,
+          Genre,
+          Tag,
+          BookGenre,
+          BookTag,
+        ].map((e) => ({ provide: getRepositoryToken(e), useValue: stub })),
         { provide: StorageService, useValue: storage },
       ],
     }).compile();
@@ -69,14 +82,24 @@ describe('BooksService - cover upload', () => {
   it('rejects PDF, oversize and unknown/invalid book', async () => {
     const base = { fileName: 'a', fileSize: 10, contentType: 'image/jpeg' };
     await expect(
-      service.createCoverUploadUrl(bookId, { ...base, contentType: 'application/pdf' }),
+      service.createCoverUploadUrl(bookId, {
+        ...base,
+        contentType: 'application/pdf',
+      }),
     ).rejects.toThrow(BadRequestException);
     await expect(
-      service.createCoverUploadUrl(bookId, { ...base, fileSize: 11 * 1024 * 1024 }),
+      service.createCoverUploadUrl(bookId, {
+        ...base,
+        fileSize: 11 * 1024 * 1024,
+      }),
     ).rejects.toThrow(BadRequestException);
-    await expect(service.createCoverUploadUrl('bad-id', base)).rejects.toThrow(NotFoundException);
+    await expect(service.createCoverUploadUrl('bad-id', base)).rejects.toThrow(
+      NotFoundException,
+    );
     bookRepo.findOne.mockResolvedValue(null);
-    await expect(service.createCoverUploadUrl(bookId, base)).rejects.toThrow(NotFoundException);
+    await expect(service.createCoverUploadUrl(bookId, base)).rejects.toThrow(
+      NotFoundException,
+    );
   });
 
   it('complete verifies HeadObject + magic bytes then stores metadata only', async () => {
@@ -92,7 +115,9 @@ describe('BooksService - cover upload', () => {
       leftJoinAndSelect: jest.fn().mockReturnThis(),
       orderBy: jest.fn().mockReturnThis(),
       where: jest.fn().mockReturnThis(),
-      getOne: jest.fn().mockResolvedValue({ id: bookId, status: BookStatus.PUBLISHED }),
+      getOne: jest
+        .fn()
+        .mockResolvedValue({ id: bookId, status: BookStatus.PUBLISHED }),
     });
     await service.completeCoverUpload(bookId, { fileName: 'a.jpg' });
     expect(bookRepo.save).toHaveBeenCalledWith(
@@ -107,18 +132,24 @@ describe('BooksService - cover upload', () => {
   });
 
   it('complete rejects mismatching bytes, bad content-type and missing object', async () => {
-    storage.headObject.mockResolvedValue({ ContentType: 'image/jpeg', ContentLength: 10 });
+    storage.headObject.mockResolvedValue({
+      ContentType: 'image/jpeg',
+      ContentLength: 10,
+    });
     storage.getObjectHead.mockResolvedValue(Buffer.from('%PDF-1.7 xxxxxx'));
-    await expect(service.completeCoverUpload(bookId, { fileName: 'a.jpg' })).rejects.toThrow(
-      BadRequestException,
-    );
-    storage.headObject.mockResolvedValue({ ContentType: 'application/pdf', ContentLength: 10 });
-    await expect(service.completeCoverUpload(bookId, { fileName: 'a.jpg' })).rejects.toThrow(
-      BadRequestException,
-    );
+    await expect(
+      service.completeCoverUpload(bookId, { fileName: 'a.jpg' }),
+    ).rejects.toThrow(BadRequestException);
+    storage.headObject.mockResolvedValue({
+      ContentType: 'application/pdf',
+      ContentLength: 10,
+    });
+    await expect(
+      service.completeCoverUpload(bookId, { fileName: 'a.jpg' }),
+    ).rejects.toThrow(BadRequestException);
     storage.headObject.mockRejectedValue({ name: 'NotFound' });
-    await expect(service.completeCoverUpload(bookId, { fileName: 'a.jpg' })).rejects.toThrow(
-      NotFoundException,
-    );
+    await expect(
+      service.completeCoverUpload(bookId, { fileName: 'a.jpg' }),
+    ).rejects.toThrow(NotFoundException);
   });
 });

@@ -36,4 +36,3 @@ describe('CatalogService', () => {
     expect(result).toHaveProperty('tags');
   });
 });
-

@@ -122,7 +122,9 @@ export class StorageService implements OnModuleInit {
         Range: `bytes=0-${bytes - 1}`,
       }),
     );
-    const body = res.Body as { transformToByteArray?: () => Promise<Uint8Array> };
+    const body = res.Body as {
+      transformToByteArray?: () => Promise<Uint8Array>;
+    };
     const arr = await body.transformToByteArray!();
     return Buffer.from(arr);
   }

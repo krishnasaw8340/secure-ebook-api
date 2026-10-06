@@ -39,13 +39,18 @@ const COVER_URL_TTL_SECONDS = 3600;
 const COVER_UPLOAD_TTL_SECONDS = 600;
 
 function detectImageType(head: Buffer): string | null {
-  if (head.length >= 3 && head[0] === 0xff && head[1] === 0xd8 && head[2] === 0xff)
+  if (
+    head.length >= 3 &&
+    head[0] === 0xff &&
+    head[1] === 0xd8 &&
+    head[2] === 0xff
+  )
     return 'image/jpeg';
   if (
     head.length >= 8 &&
-    head.subarray(0, 8).equals(
-      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
-    )
+    head
+      .subarray(0, 8)
+      .equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
   )
     return 'image/png';
   if (
@@ -128,7 +133,9 @@ export class BooksService {
     const book = await this.getEditableBook(bookId);
 
     const contentType = dto.contentType?.toLowerCase();
-    if (!(ALLOWED_COVER_CONTENT_TYPES as readonly string[]).includes(contentType)) {
+    if (
+      !(ALLOWED_COVER_CONTENT_TYPES as readonly string[]).includes(contentType)
+    ) {
       throw new BadRequestException(
         'Unsupported image type. Allowed: JPEG, PNG, WebP',
       );
@@ -188,7 +195,9 @@ export class BooksService {
     }
 
     const contentType = (head.ContentType || '').toLowerCase();
-    if (!(ALLOWED_COVER_CONTENT_TYPES as readonly string[]).includes(contentType)) {
+    if (
+      !(ALLOWED_COVER_CONTENT_TYPES as readonly string[]).includes(contentType)
+    ) {
       throw new BadRequestException(
         `Invalid cover content type "${head.ContentType}"`,
       );
@@ -207,9 +216,13 @@ export class BooksService {
     // Do not trust the declared MIME type: verify actual bytes.
     let detected: string | null = null;
     try {
-      detected = detectImageType(await this.storageService.getObjectHead(objectKey));
+      detected = detectImageType(
+        await this.storageService.getObjectHead(objectKey),
+      );
     } catch (error: any) {
-      this.logger.error(`Content sniff failed for ${objectKey}: ${error?.name}`);
+      this.logger.error(
+        `Content sniff failed for ${objectKey}: ${error?.name}`,
+      );
       throw new BadRequestException('Failed to verify cover image content');
     }
     if (detected !== contentType) {

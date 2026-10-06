@@ -36,6 +36,7 @@ import {
   ChapterPdfUploadInitDto,
   ChapterPdfUploadInitResponseDto,
   ChapterPdfUploadCompleteDto,
+  ChapterAccessResponseDto,
 } from '../dto';
 
 @ApiTags('Chapters')
@@ -101,6 +102,32 @@ export class ChaptersController {
   @ApiResponse({ status: 404, description: 'Chapter not found.' })
   findOne(@Param('id') id: string, @CurrentUser() user?: JwtUser) {
     return this.chaptersService.findOne(id, user);
+  }
+
+  @Get(':id/access')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary:
+      'Get authorized presigned access URL for chapter PDF (Authenticated users)',
+  })
+  @ApiParam({
+    name: 'id',
+    description: 'Chapter UUID',
+    example: 'c0000000-0000-0000-0000-000000000001',
+  })
+  @ApiResponse({
+    status: 200,
+    description:
+      'Authorized temporary presigned PDF download URL and chapter metadata.',
+    type: ChapterAccessResponseDto,
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized.' })
+  @ApiResponse({
+    status: 404,
+    description: 'Chapter not found or PDF content not available.',
+  })
+  getChapterAccess(@Param('id') id: string, @CurrentUser() user?: JwtUser) {
+    return this.chaptersService.getChapterAccess(id, user);
   }
 
   @Patch(':id')
@@ -209,8 +236,7 @@ export class ChaptersController {
   @UseGuards(RolesGuard)
   @ApiBearerAuth()
   @ApiOperation({
-    summary:
-      'Verify S3 PDF object and finalize Chapter metadata (Admin only)',
+    summary: 'Verify S3 PDF object and finalize Chapter metadata (Admin only)',
   })
   @ApiParam({ name: 'id', description: 'Chapter UUID' })
   @ApiResponse({

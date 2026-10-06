@@ -14,6 +14,7 @@ import { RoleType } from '../../common/enums/role.enum';
 import type { JwtUser } from '../../auth/interfaces/jwt-user.interface';
 import { randomUUID } from 'node:crypto';
 import { StorageService } from '../../storage/storage.service';
+import type { HeadObjectCommandOutput } from '@aws-sdk/client-s3';
 import {
   CreateChapterDto,
   UpdateChapterDto,
@@ -24,6 +25,7 @@ import {
   ChapterPdfUploadInitDto,
   ChapterPdfUploadInitResponseDto,
   ChapterPdfUploadCompleteDto,
+  ChapterAccessResponseDto,
 } from '../dto';
 
 @Injectable()
@@ -445,12 +447,16 @@ export class ChaptersService {
     }
 
     if (chapter.deletedAt) {
-      throw new BadRequestException('Cannot upload content for a deleted chapter');
+      throw new BadRequestException(
+        'Cannot upload content for a deleted chapter',
+      );
     }
 
     const contentType = dto.contentType || dto.mimeType || 'application/pdf';
     if (contentType.toLowerCase() !== 'application/pdf') {
-      throw new BadRequestException('Only PDF files (application/pdf) are supported');
+      throw new BadRequestException(
+        'Only PDF files (application/pdf) are supported',
+      );
     }
 
     if (dto.fileSize <= 0) {
@@ -474,12 +480,8 @@ export class ChaptersService {
       expiresInSeconds: 600,
     });
 
-    chapter.pdfStorageKey = objectKey;
-    chapter.pdfFileName = dto.fileName.trim();
-    chapter.pdfFileSize = dto.fileSize;
-    chapter.contentStatus = ChapterContentStatus.PENDING;
-
-    await this.chapterRepository.save(chapter);
+    // Invariant: Do NOT mutate chapter.pdfStorageKey or chapter.contentStatus during upload URL generation.
+    // The active PDF remains untouched until the new S3 object has been successfully uploaded and verified.
 
     return {
       uploadId,
@@ -521,10 +523,12 @@ export class ChaptersService {
     }
 
     if (chapter.deletedAt) {
-      throw new BadRequestException('Cannot complete upload for a deleted chapter');
+      throw new BadRequestException(
+        'Cannot complete upload for a deleted chapter',
+      );
     }
 
-    const objectKey = dto.objectKey || dto.storageKey || chapter.pdfStorageKey;
+    const objectKey = dto.objectKey || dto.storageKey;
     if (!objectKey) {
       throw new BadRequestException('Missing objectKey for verification');
     }
@@ -532,7 +536,10 @@ export class ChaptersService {
     // Validate objectKey relationship to chapter
     const expectedPrefix = `chapters/${chapter.id}/`;
     const legacyPrefix = `books/${chapter.bookId}/chapters/${chapter.id}/`;
-    if (!objectKey.startsWith(expectedPrefix) && !objectKey.startsWith(legacyPrefix)) {
+    if (
+      !objectKey.startsWith(expectedPrefix) &&
+      !objectKey.startsWith(legacyPrefix)
+    ) {
       throw new BadRequestException(
         `Object key "${objectKey}" does not belong to chapter "${chapter.id}"`,
       );
@@ -545,21 +552,22 @@ export class ChaptersService {
     }
 
     // Verify S3 object directly using HeadObject
-    let s3Head;
+    let s3Head: HeadObjectCommandOutput;
     try {
       s3Head = await this.storageService.headObject(objectKey);
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const s3Error = error as { name?: string; message?: string; $metadata?: { httpStatusCode?: number } };
       if (
-        error.name === 'NotFound' ||
-        error.name === 'NoSuchKey' ||
-        error.$metadata?.httpStatusCode === 404
+        s3Error?.name === 'NotFound' ||
+        s3Error?.name === 'NoSuchKey' ||
+        s3Error?.$metadata?.httpStatusCode === 404
       ) {
         throw new NotFoundException(
           'S3 object not found or upload has not completed yet',
         );
       }
       throw new BadRequestException(
-        `Failed to verify S3 object: ${error.message || 'Unknown S3 error'}`,
+        `Failed to verify S3 object: ${s3Error?.message || 'Unknown S3 error'}`,
       );
     }
 
@@ -574,7 +582,11 @@ export class ChaptersService {
     }
 
     // Verify object size is within configured maximum
-    const verifiedSize = s3Head.ContentLength ?? dto.fileSize ?? chapter.pdfFileSize;
+    const verifiedSize =
+      s3Head.ContentLength ?? dto.fileSize ?? chapter.pdfFileSize;
+    if (verifiedSize !== undefined && verifiedSize <= 0) {
+      throw new BadRequestException('Uploaded PDF object is empty');
+    }
     const maxSizeBytes = this.storageService.getMaxFileSizeBytes();
     if (verifiedSize !== undefined && verifiedSize > maxSizeBytes) {
       throw new BadRequestException(
@@ -582,7 +594,7 @@ export class ChaptersService {
       );
     }
 
-    // Update Chapter PDF metadata
+    // Update Chapter PDF metadata only after successful S3 verification
     chapter.pdfStorageKey = objectKey;
     chapter.pdfFileName = dto.fileName
       ? dto.fileName.trim()
@@ -593,5 +605,66 @@ export class ChaptersService {
     chapter.contentStatus = ChapterContentStatus.READY;
 
     return this.chapterRepository.save(chapter);
+  }
+
+  /**
+   * GET /chapters/:id/access (Authenticated Users)
+   * Retrieves an authorized short-lived presigned download URL for the Chapter PDF.
+   */
+  async getChapterAccess(
+    id: string,
+    user?: JwtUser,
+  ): Promise<ChapterAccessResponseDto> {
+    const isAdmin = this.isAdminUser(user);
+
+    const chapter = await this.chapterRepository.findOne({
+      where: { id },
+    });
+
+    if (!chapter) {
+      throw new NotFoundException(`Chapter "${id}" not found`);
+    }
+
+    if (chapter.deletedAt) {
+      throw new NotFoundException(`Chapter "${id}" not found`);
+    }
+
+    // Non-admin users cannot access unpublished chapters
+    if (!isAdmin && !chapter.published) {
+      throw new NotFoundException(`Chapter "${id}" not found`);
+    }
+
+    // Verify Chapter has an active/ready PDF reference in DB
+    if (
+      !chapter.pdfStorageKey ||
+      chapter.contentStatus !== ChapterContentStatus.READY
+    ) {
+      throw new NotFoundException('Chapter PDF content is not available');
+    }
+
+    // Entitlement checking extension point:
+    // Free chapters are accessible to all authenticated users.
+    // Paid chapters are accessible to Admins; for regular users, entitlement verification (ChapterUnlock / Wallet) will be enforced here.
+    if (chapter.pricingModel === ChapterPricingModel.PAID && !isAdmin) {
+      // Future extension: verify ChapterUnlock record or throw ForbiddenException
+    }
+
+    const expiresInSeconds = 600; // 10 minutes
+    const pdfUrl = await this.storageService.generatePresignedDownloadUrl(
+      chapter.pdfStorageKey,
+      expiresInSeconds,
+    );
+
+    return {
+      chapterId: chapter.id,
+      bookId: chapter.bookId,
+      chapterNumber: chapter.chapterNumber,
+      title: chapter.title,
+      pdfUrl,
+      expiresIn: expiresInSeconds,
+      pageCount: chapter.pdfPageCount,
+      fileName: chapter.pdfFileName,
+      fileSize: chapter.pdfFileSize,
+    };
   }
 }

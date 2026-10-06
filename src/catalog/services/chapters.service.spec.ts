@@ -68,6 +68,9 @@ describe('ChaptersService', () => {
       generatePresignedUploadUrl: jest
         .fn()
         .mockResolvedValue('https://storage-mock.amazonaws.com/upload'),
+      generatePresignedDownloadUrl: jest
+        .fn()
+        .mockResolvedValue('https://storage-mock.amazonaws.com/download'),
       headObject: jest.fn().mockResolvedValue({
         ContentType: 'application/pdf',
         ContentLength: 15420000,
@@ -305,8 +308,9 @@ describe('ChaptersService', () => {
   });
 
   describe('upload contracts', () => {
-    it('should generate S3 presigned upload URL with immutable versioned key', async () => {
-      chapterRepo.findOne.mockResolvedValue({ ...mockChapter });
+    it('should generate S3 presigned upload URL with immutable versioned key without prematurely mutating chapter state', async () => {
+      const initialChapter = { ...mockChapter };
+      chapterRepo.findOne.mockResolvedValue(initialChapter);
 
       const result = await service.generateUploadUrl(mockChapter.id!, {
         fileName: 'chapter-001.pdf',
@@ -321,13 +325,57 @@ describe('ChaptersService', () => {
         `chapters/${mockChapter.id}/versions/${result.versionId}/chapter.pdf`,
       );
       expect(result.storageKey).toBe(result.objectKey);
-      expect(result.uploadUrl).toBe('https://storage-mock.amazonaws.com/upload');
+      expect(result.uploadUrl).toBe(
+        'https://storage-mock.amazonaws.com/upload',
+      );
       expect(result.expiresIn).toBe(600);
       expect(storageService.generatePresignedUploadUrl).toHaveBeenCalledWith({
         key: result.objectKey,
         contentType: 'application/pdf',
         expiresInSeconds: 600,
       });
+      // Invariant: active chapter reference MUST NOT be saved or mutated during upload-url generation
+      expect(chapterRepo.save).not.toHaveBeenCalled();
+      expect(initialChapter.pdfStorageKey).toBe(mockChapter.pdfStorageKey);
+    });
+
+    it('should maintain active PDF reference during replacement until S3 verification succeeds', async () => {
+      const oldStorageKey = 'chapters/c001/versions/v1/chapter.pdf';
+      const activeChapter = {
+        ...mockChapter,
+        pdfStorageKey: oldStorageKey,
+        contentStatus: ChapterContentStatus.READY,
+      };
+      chapterRepo.findOne.mockResolvedValue(activeChapter);
+
+      // 1. Generate upload URL for version 2
+      const uploadResult = await service.generateUploadUrl(mockChapter.id!, {
+        fileName: 'chapter-v2.pdf',
+        fileSize: 16000000,
+        contentType: 'application/pdf',
+      });
+
+      // Assert active PDF is still old version
+      expect(activeChapter.pdfStorageKey).toBe(oldStorageKey);
+      expect(activeChapter.contentStatus).toBe(ChapterContentStatus.READY);
+      expect(chapterRepo.save).not.toHaveBeenCalled();
+
+      // 2. Complete upload for version 2
+      storageService.headObject.mockResolvedValue({
+        ContentType: 'application/pdf',
+        ContentLength: 16000000,
+      });
+
+      const completeResult = await service.completePdfUpload(mockChapter.id!, {
+        objectKey: uploadResult.objectKey,
+        versionId: uploadResult.versionId,
+        fileName: 'chapter-v2.pdf',
+        fileSize: 16000000,
+      });
+
+      // Assert active PDF is now updated to version 2
+      expect(completeResult.pdfStorageKey).toBe(uploadResult.objectKey);
+      expect(completeResult.contentStatus).toBe(ChapterContentStatus.READY);
       expect(chapterRepo.save).toHaveBeenCalled();
     });
 
@@ -472,6 +520,77 @@ describe('ChaptersService', () => {
           fileName: 'chapter-001.pdf',
         }),
       ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  describe('getChapterAccess', () => {
+    it('should return short-lived presigned GET URL for DB-linked storage key', async () => {
+      chapterRepo.findOne.mockResolvedValue({ ...mockChapter });
+
+      const result = await service.getChapterAccess(mockChapter.id!);
+
+      expect(chapterRepo.findOne).toHaveBeenCalledWith({
+        where: { id: mockChapter.id },
+      });
+      expect(storageService.generatePresignedDownloadUrl).toHaveBeenCalledWith(
+        mockChapter.pdfStorageKey,
+        600,
+      );
+      expect(result.chapterId).toBe(mockChapter.id);
+      expect(result.pdfUrl).toBe('https://storage-mock.amazonaws.com/download');
+      expect(result.expiresIn).toBe(600);
+      expect(result.fileName).toBe(mockChapter.pdfFileName);
+    });
+
+    it('should throw NotFoundException if chapter does not exist', async () => {
+      chapterRepo.findOne.mockResolvedValue(null);
+
+      await expect(service.getChapterAccess('non-existent-id')).rejects.toThrow(
+        NotFoundException,
+      );
+    });
+
+    it('should throw NotFoundException if chapter is unpublished for non-admin user', async () => {
+      chapterRepo.findOne.mockResolvedValue({
+        ...mockChapter,
+        published: false,
+      });
+
+      await expect(
+        service.getChapterAccess(mockChapter.id!, {
+          userId: 'user-1',
+          email: 'user@example.com',
+          roles: ['USER'],
+        }),
+      ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should allow admin user to access unpublished chapter', async () => {
+      chapterRepo.findOne.mockResolvedValue({
+        ...mockChapter,
+        published: false,
+      });
+
+      const result = await service.getChapterAccess(mockChapter.id!, {
+        userId: 'admin-1',
+        email: 'admin@kuroyomi.com',
+        roles: ['ADMIN'],
+      });
+
+      expect(result.chapterId).toBe(mockChapter.id);
+      expect(result.pdfUrl).toBeDefined();
+    });
+
+    it('should throw NotFoundException if chapter has no active PDF key', async () => {
+      chapterRepo.findOne.mockResolvedValue({
+        ...mockChapter,
+        pdfStorageKey: null,
+        contentStatus: ChapterContentStatus.PENDING,
+      });
+
+      await expect(service.getChapterAccess(mockChapter.id!)).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 

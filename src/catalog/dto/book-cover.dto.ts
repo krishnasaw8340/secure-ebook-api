@@ -30,7 +30,7 @@ export class BookCoverUploadUrlDto {
 
   @ApiProperty({ enum: ALLOWED_COVER_CONTENT_TYPES, example: 'image/jpeg' })
   @IsString()
-  @IsIn(ALLOWED_COVER_CONTENT_TYPES as unknown as string[], {
+  @IsIn(ALLOWED_COVER_CONTENT_TYPES, {
     message: 'contentType must be one of image/jpeg, image/png, image/webp',
   })
   contentType: string;

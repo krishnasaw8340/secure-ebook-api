@@ -150,7 +150,9 @@ describe('BooksService', () => {
               .mockResolvedValue('https://signed.example/put'),
             headObject: jest.fn(),
             getObjectHead: jest.fn(),
-            getMaxBookCoverSizeBytes: jest.fn().mockReturnValue(10 * 1024 * 1024),
+            getMaxBookCoverSizeBytes: jest
+              .fn()
+              .mockReturnValue(10 * 1024 * 1024),
             getMaxBookCoverSizeMb: jest.fn().mockReturnValue(10),
           },
         },

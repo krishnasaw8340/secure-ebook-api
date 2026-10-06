@@ -3,7 +3,9 @@ import { ConfigService } from '@nestjs/config';
 import { StorageService } from './storage.service';
 
 jest.mock('@aws-sdk/s3-request-presigner', () => ({
-  getSignedUrl: jest.fn().mockResolvedValue('https://s3.ap-south-1.amazonaws.com/test-url'),
+  getSignedUrl: jest
+    .fn()
+    .mockResolvedValue('https://s3.ap-south-1.amazonaws.com/test-url'),
 }));
 
 jest.mock('@aws-sdk/client-s3', () => {
@@ -77,7 +79,9 @@ describe('StorageService', () => {
   });
 
   it('should check headObject', async () => {
-    const head = await service.headObject('chapters/c1/versions/v1/chapter.pdf');
+    const head = await service.headObject(
+      'chapters/c1/versions/v1/chapter.pdf',
+    );
     expect(head.ContentType).toBe('application/pdf');
     expect(head.ContentLength).toBe(15420000);
   });

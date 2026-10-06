@@ -48,4 +48,3 @@ describe('CatalogController', () => {
     expect(mockCatalogService.getMetadata).toHaveBeenCalled();
   });
 });
-
