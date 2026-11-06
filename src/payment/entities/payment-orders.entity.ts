@@ -22,6 +22,7 @@ export enum PaymentOrderStatus {
 @Entity({ schema: 'payment', name: 'payment_orders' })
 @Unique('UQ_payment_orders_provider_order', ['provider', 'providerOrderId'])
 @Unique('UQ_payment_orders_provider_payment', ['provider', 'providerPaymentId'])
+@Unique('UQ_payment_orders_order_code', ['orderCode'])
 export class PaymentOrder {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -32,6 +33,16 @@ export class PaymentOrder {
 
   @Column({ name: 'package_id', type: 'uuid' })
   packageId: string;
+
+  @Column({ name: 'order_code', type: 'varchar', length: 15, nullable: true })
+  orderCode: string | null;
+
+  @Column({
+    name: 'code_redeemed_at',
+    type: 'timestamptz',
+    nullable: true,
+  })
+  codeRedeemedAt: Date | null;
 
   /** Snapshot at purchase time so later package edits never alter an order. */
   @Column({ name: 'coins_amount', type: 'integer' })

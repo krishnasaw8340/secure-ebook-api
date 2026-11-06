@@ -20,28 +20,46 @@ const validationSchema = Joi.object({
   JWT_REFRESH_EXPIRES_IN: Joi.string().required(),
 
   // Mail
-  MAIL_HOST: Joi.string().optional(),
+  MAIL_HOST: Joi.string().allow('').optional(),
   MAIL_PORT: Joi.number().optional(),
-  MAIL_USER: Joi.string().optional(),
-  MAIL_USERNAME: Joi.string().optional(),
-  MAIL_PASSWORD: Joi.string().optional(),
+  MAIL_USER: Joi.string().allow('').optional(),
+  MAIL_USERNAME: Joi.string().allow('').optional(),
+  MAIL_PASSWORD: Joi.string().allow('').optional(),
   MAIL_SECURE: Joi.boolean().optional(),
-  MAIL_FROM: Joi.string().optional(),
+  MAIL_FROM: Joi.string().allow('').optional(),
 
-  // Payment (provider adapters are plugged in separately)
-  PAYMENT_PROVIDER: Joi.string().optional(),
+  // PayPal and Discord payment flow
+  PAYMENT_PROVIDER: Joi.string().allow('').optional(),
   PAYMENT_ORDER_TTL_MINUTES: Joi.number().min(1).default(20),
   PAYMENT_MAX_PENDING_ORDERS: Joi.number().min(1).default(5),
-  PAYMENT_RETURN_URL: Joi.string().uri().optional(),
+  PAYMENT_RETURN_URL: Joi.string().uri().allow('').optional(),
+  PAYMENT_PUBLIC_API_URL: Joi.string().uri().allow('').optional(),
+  PAYPAL_BASE_URL: Joi.alternatives().conditional('NODE_ENV', {
+    is: 'production',
+    then: Joi.string().uri().required(),
+    otherwise: Joi.string().uri().allow('').optional(),
+  }),
+  PAYPAL_CLIENT_ID: Joi.string().allow('').optional(),
+  PAYPAL_CLIENT_SECRET: Joi.string().allow('').optional(),
+  PAYPAL_WEBHOOK_ID: Joi.string().allow('').optional(),
+  DISCORD_BOT_TOKEN: Joi.string().allow('').optional(),
+  DISCORD_APPLICATION_ID: Joi.string().allow('').optional(),
+  DISCORD_APPLICATION_PUBLIC_KEY: Joi.string()
+    .allow('')
+    .hex()
+    .length(64)
+    .optional(),
+  DISCORD_SERVER_ID: Joi.string().allow('').optional(),
+  DISCORD_PAYMENT_CHANNEL_ID: Joi.string().allow('').optional(),
   WELCOME_BONUS_COINS: Joi.number().integer().min(0).default(200),
-  RAZORPAY_KEY: Joi.string().optional(),
-  RAZORPAY_SECRET: Joi.string().optional(),
+  RAZORPAY_KEY: Joi.string().allow('').optional(),
+  RAZORPAY_SECRET: Joi.string().allow('').optional(),
 
   // AWS S3
-  AWS_ACCESS_KEY_ID: Joi.string().optional(),
-  AWS_SECRET_ACCESS_KEY: Joi.string().optional(),
+  AWS_ACCESS_KEY_ID: Joi.string().allow('').optional(),
+  AWS_SECRET_ACCESS_KEY: Joi.string().allow('').optional(),
   AWS_REGION: Joi.string().default('ap-south-1'),
-  AWS_S3_BUCKET: Joi.string().optional(),
+  AWS_S3_BUCKET: Joi.string().allow('').optional(),
   MAX_CHAPTER_PDF_SIZE_MB: Joi.number().default(200),
   MAX_BOOK_COVER_SIZE_MB: Joi.number().default(10),
 });

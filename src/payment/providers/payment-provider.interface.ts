@@ -16,6 +16,7 @@ export interface CheckoutRequest {
   currency: string;
   description: string;
   returnUrl?: string;
+  cancelUrl?: string;
   expiresAt: Date;
 }
 
@@ -65,4 +66,12 @@ export interface PaymentProvider {
    * do not act on.
    */
   parseWebhook(request: RawWebhookRequest): NormalizedPaymentEvent | null;
+}
+
+export interface CheckoutCaptureProvider extends PaymentProvider {
+  /** Capture a buyer-approved checkout and normalize the verified API result. */
+  captureCheckout(
+    providerOrderId: string,
+    orderId: string,
+  ): Promise<NormalizedPaymentEvent>;
 }

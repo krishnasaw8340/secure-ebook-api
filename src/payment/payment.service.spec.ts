@@ -7,9 +7,16 @@ describe('PaymentService', () => {
     const registry = {
       getActive: () => undefined,
     } as unknown as PaymentProviderRegistry;
-    const service = new PaymentService({} as never, {} as never, registry, {
-      get: jest.fn(),
-    } as never);
+    const service = new PaymentService(
+      {} as never,
+      {} as never,
+      registry,
+      {
+        get: jest.fn(),
+      } as never,
+      {} as never,
+      {} as never,
+    );
     await expect(service.createOrder('u1', 'p1')).rejects.toBeInstanceOf(
       ServiceUnavailableException,
     );

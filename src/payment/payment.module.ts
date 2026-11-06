@@ -9,12 +9,14 @@ import { PaymentProviderRegistry } from './providers/payment-provider.registry';
 import { PAYMENT_PROVIDERS } from './providers/payment-provider.interface';
 import { PaymentOrder } from './entities/payment-orders.entity';
 import { WalletModule } from '../wallet/wallet.module';
+import { PayPalPaymentProvider } from './providers/paypal-payment.provider';
+import { DiscordPaymentService } from './services/discord-payment.service';
+import { DiscordInteractionController } from './controllers/discord-interaction.controller';
+import { PayPalReturnController } from './controllers/paypal-return.controller';
 
 /**
- * To plug in a gateway, implement PaymentProvider and add it to the
- * PAYMENT_PROVIDERS list below (use useFactory to inject ConfigService).
- * No adapter ships by default, so order creation returns 503 until one is
- * registered; webhooks for unknown providers return 404.
+ * The PayPal adapter is registered here. Discord interactions provide a
+ * one-time order-code entry point; all coin settlement remains server-side.
  */
 @Module({
   imports: [TypeOrmModule.forFeature([PaymentOrder]), WalletModule],
@@ -23,9 +25,20 @@ import { WalletModule } from '../wallet/wallet.module';
     PaymentWebhookService,
     PaymentSettlementService,
     PaymentProviderRegistry,
-    { provide: PAYMENT_PROVIDERS, useValue: [] },
+    DiscordPaymentService,
+    PayPalPaymentProvider,
+    {
+      provide: PAYMENT_PROVIDERS,
+      useFactory: (paypal: PayPalPaymentProvider) => [paypal],
+      inject: [PayPalPaymentProvider],
+    },
   ],
-  controllers: [PaymentController, PaymentWebhookController],
+  controllers: [
+    PaymentController,
+    PaymentWebhookController,
+    DiscordInteractionController,
+    PayPalReturnController,
+  ],
   exports: [PaymentProviderRegistry],
 })
 export class PaymentModule {}

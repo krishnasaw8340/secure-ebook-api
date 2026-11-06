@@ -88,17 +88,45 @@ graph TD
     DatabaseModule --> TypeOrmModule
 ```
 
-| Module | Purpose & Scope |
-| :--- | :--- |
-| **`AuthModule`** | Manages registration, OTPs, bcrypt hashing, JWT issuance, refresh token rotation, password recovery, and auth guards. |
-| **`UserModule`** | Manages user accounts, profile queries, role assignment, and user status lifecycles. |
-| **`CatalogModule`** | Domain entities for manga/ebook series, volumes, books, and chapters with PDF content. |
-| **`StorageModule`** | AWS S3 presigned PUT URL generation, HeadObject verification, magic-byte detection, and presigned GET streaming URLs. |
-| **`ReadingModule`** | Handles user libraries, reading progress sync, bookmarks, and chapter access logs. |
-| **`WalletModule`** | Manages virtual coin balances, packages, unlocking fees, and transaction ledgers. |
-| **`PaymentModule`** | Integrations with payment gateways (Razorpay / Stripe) and order processing. |
-| **`CommonModule`** | Global mailer services (`Nodemailer`), base entities, enums, and responsive HTML email templates. |
-| **`DatabaseModule`** | TypeORM connection pooling, automatic migration executor, and startup data seeders. |
+| Module               | Purpose & Scope                                                                                                       |
+| :------------------- | :-------------------------------------------------------------------------------------------------------------------- |
+| **`AuthModule`**     | Manages registration, OTPs, bcrypt hashing, JWT issuance, refresh token rotation, password recovery, and auth guards. |
+| **`UserModule`**     | Manages user accounts, profile queries, role assignment, and user status lifecycles.                                  |
+| **`CatalogModule`**  | Domain entities for manga/ebook series, volumes, books, and chapters with PDF content.                                |
+| **`StorageModule`**  | AWS S3 presigned PUT URL generation, HeadObject verification, magic-byte detection, and presigned GET streaming URLs. |
+| **`ReadingModule`**  | Handles user libraries, reading progress sync, bookmarks, and chapter access logs.                                    |
+| **`WalletModule`**   | Manages virtual coin balances, packages, unlocking fees, and transaction ledgers.                                     |
+| **`PaymentModule`**  | Discord one-time order-code flow, PayPal checkout/capture, verified webhooks, and atomic wallet settlement.           |
+| **`CommonModule`**   | Global mailer services (`Nodemailer`), base entities, enums, and responsive HTML email templates.                     |
+| **`DatabaseModule`** | TypeORM connection pooling, automatic migration executor, and startup data seeders.                                   |
+
+### Discord + PayPal Coin Checkout
+
+The wallet creates a pending order and displays its one-time `KY-` code (12 random hexadecimal characters). The API ensures a reusable **Enter Order Code** button exists in the configured Discord payment channel. The Discord interaction opens a code-entry modal and responds privately with a PayPal checkout link. The website polls the authenticated order status; the wallet balance is refreshed only after the backend confirms settlement.
+
+Coin packages are configured in the database by migrations:
+
+| Coins |    USD |
+| ----: | -----: |
+|   500 |  $4.99 |
+| 1,200 |  $9.99 |
+| 3,500 | $24.99 |
+| 8,000 | $49.99 |
+
+For sandbox testing, configure the PayPal sandbox app credentials and a webhook subscribed to `PAYMENT.CAPTURE.COMPLETED` and `PAYMENT.CAPTURE.DENIED`, with its delivery URL set to `https://<api-host>/api/payment/webhook/paypal`. Use the webhook ID shown by PayPal, not the webhook URL. Production must use PayPal live credentials and `https://api-m.paypal.com`.
+
+Configure these backend environment variables; never commit their secret values:
+
+- `PAYMENT_PROVIDER=paypal`
+- `PAYMENT_PUBLIC_API_URL` — public API origin, with no `/api` suffix
+- `PAYMENT_RETURN_URL` — frontend wallet URL to return to after PayPal checkout
+- `PAYPAL_BASE_URL`, `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `PAYPAL_WEBHOOK_ID`
+- `DISCORD_BOT_TOKEN`, `DISCORD_APPLICATION_ID`, `DISCORD_APPLICATION_PUBLIC_KEY`
+- `DISCORD_SERVER_ID`, `DISCORD_PAYMENT_CHANNEL_ID`
+
+In the Discord Developer Portal, set the Interactions Endpoint URL to `https://<api-host>/api/payment/discord/interactions`. Invite the bot with permission to view the payment channel, read its message history, and send messages. The API posts or updates the reusable order-code button when the first wallet order is created. After setting environment variables, apply database changes from `secure-ebook-api` with `pnpm migration:run`.
+
+PayPal approval is captured server-side on its return callback; the signed PayPal webhook is also verified and settled idempotently. Both paths use the same PostgreSQL transaction, so an order is never credited twice.
 
 ---
 
@@ -268,6 +296,7 @@ secure-ebook-api/
 ### Dual-Token Rotation Lifecycle
 
 Traditional authentication systems suffer from an inherent security trade-off:
+
 1. **Long-Lived Stateless Tokens**: If intercepted, the attacker maintains access until expiration, with no server-side revocation mechanism.
 2. **Short-Lived Tokens Only**: Forces users to frequently re-enter credentials, degrading UX.
 
@@ -381,31 +410,31 @@ sequenceDiagram
 
 ### Token Comparison Matrix
 
-| Property | Access Token | Refresh Token |
-| :--- | :--- | :--- |
-| **Lifespan** | 15 Minutes (`JWT_EXPIRES_IN=15m`) | 30 Days (`JWT_REFRESH_EXPIRES_IN=30d`) |
+| Property                | Access Token                                                      | Refresh Token                                               |
+| :---------------------- | :---------------------------------------------------------------- | :---------------------------------------------------------- |
+| **Lifespan**            | 15 Minutes (`JWT_EXPIRES_IN=15m`)                                 | 30 Days (`JWT_REFRESH_EXPIRES_IN=30d`)                      |
 | **Validation Strategy** | **Stateless**: In-memory signature verification via `JwtStrategy` | **Stateful**: Database hash lookup in `auth.refresh_tokens` |
-| **Storage in DB** | Never stored in DB | Stored as **SHA-256 cryptographic hash** |
-| **Payload Claim** | `{ sub, email, roles, type: 'access' }` | `{ sub, email, roles, type: 'refresh' }` |
-| **Transmission** | HTTP Header: `Authorization: Bearer <token>` | JSON Body: `{ "refreshToken": "<token>" }` |
-| **Rotation Behavior** | Re-issued upon calling `/auth/refresh` | **Single-use**: Consumed and replaced immediately |
-| **Secret Key** | `JWT_SECRET` | `JWT_REFRESH_SECRET` |
+| **Storage in DB**       | Never stored in DB                                                | Stored as **SHA-256 cryptographic hash**                    |
+| **Payload Claim**       | `{ sub, email, roles, type: 'access' }`                           | `{ sub, email, roles, type: 'refresh' }`                    |
+| **Transmission**        | HTTP Header: `Authorization: Bearer <token>`                      | JSON Body: `{ "refreshToken": "<token>" }`                  |
+| **Rotation Behavior**   | Re-issued upon calling `/auth/refresh`                            | **Single-use**: Consumed and replaced immediately           |
+| **Secret Key**          | `JWT_SECRET`                                                      | `JWT_REFRESH_SECRET`                                        |
 
 ---
 
 ### Security & Defense Mechanisms
 
-| Defense Layer | Implementation Detail | Security Purpose |
-| :--- | :--- | :--- |
-| **Email Verification Gate** | `user.isEmailVerified === true` checked before login | Prevents spambots and unverified accounts from creating sessions. |
-| **Bcrypt OTP Hashing** | OTPs are hashed using `bcrypt` before storage in `auth.otp_verifications` | Prevents plain-text OTP leaks even in the event of a database compromise. |
-| **Brute-Force Throttle** | `attempts` column increments per attempt; locked at > 5 attempts | Neutralizes OTP brute-forcing and dictionary attacks. |
-| **Account Enumeration Immunity** | `/auth/forgot-password` and `/auth/resend-verification-otp` return identical responses | Prevents malicious actors from discovering registered email addresses. |
-| **Strict Token Type Scoping** | `payload.type` (`'access'` vs `'refresh'`) strictly enforced | Prevents using a refresh token to access API endpoints or vice versa. |
-| **Token Theft Neutralization** | Reusing a consumed refresh token results in instant rejection | If a token is stolen and used after legitimate rotation, access is blocked. |
-| **Global Session Teardown** | Password reset and `/auth/logout-all` revoke all active tokens | Immediately invalidates compromised devices upon credential changes. |
-| **Global JWT Guard & `@Public()`** | Global `APP_GUARD` protects all routes by default | Eliminates human error of forgetting to protect new endpoints. |
-| **Parameter Sanitization** | `ValidationPipe` with `whitelist: true` & `transform: true` | Strips unexpected payload fields to prevent mass-assignment attacks. |
+| Defense Layer                      | Implementation Detail                                                                  | Security Purpose                                                            |
+| :--------------------------------- | :------------------------------------------------------------------------------------- | :-------------------------------------------------------------------------- |
+| **Email Verification Gate**        | `user.isEmailVerified === true` checked before login                                   | Prevents spambots and unverified accounts from creating sessions.           |
+| **Bcrypt OTP Hashing**             | OTPs are hashed using `bcrypt` before storage in `auth.otp_verifications`              | Prevents plain-text OTP leaks even in the event of a database compromise.   |
+| **Brute-Force Throttle**           | `attempts` column increments per attempt; locked at > 5 attempts                       | Neutralizes OTP brute-forcing and dictionary attacks.                       |
+| **Account Enumeration Immunity**   | `/auth/forgot-password` and `/auth/resend-verification-otp` return identical responses | Prevents malicious actors from discovering registered email addresses.      |
+| **Strict Token Type Scoping**      | `payload.type` (`'access'` vs `'refresh'`) strictly enforced                           | Prevents using a refresh token to access API endpoints or vice versa.       |
+| **Token Theft Neutralization**     | Reusing a consumed refresh token results in instant rejection                          | If a token is stolen and used after legitimate rotation, access is blocked. |
+| **Global Session Teardown**        | Password reset and `/auth/logout-all` revoke all active tokens                         | Immediately invalidates compromised devices upon credential changes.        |
+| **Global JWT Guard & `@Public()`** | Global `APP_GUARD` protects all routes by default                                      | Eliminates human error of forgetting to protect new endpoints.              |
+| **Parameter Sanitization**         | `ValidationPipe` with `whitelist: true` & `transform: true`                            | Strips unexpected payload fields to prevent mass-assignment attacks.        |
 
 ---
 
@@ -424,9 +453,9 @@ The `@DeviceInfo()` parameter decorator inspects incoming HTTP request headers t
 
 The application implements granular authorization through roles:
 
-* **Available Roles**: `SUPER_ADMIN`, `ADMIN`, `USER` (defined in `RoleType` enum).
-* **`@Roles(...)` Decorator**: Attaches required role metadata to controller classes or route handlers.
-* **`RolesGuard`**: Evaluates the authenticated user's assigned roles against the required metadata.
+- **Available Roles**: `SUPER_ADMIN`, `ADMIN`, `USER` (defined in `RoleType` enum).
+- **`@Roles(...)` Decorator**: Attaches required role metadata to controller classes or route handlers.
+- **`RolesGuard`**: Evaluates the authenticated user's assigned roles against the required metadata.
 
 ```typescript
 // Example: Restricting an endpoint to Administrators
@@ -515,72 +544,76 @@ erDiagram
 ### Data Dictionary & Table Reference
 
 #### 1. Table: `auth.users`
+
 Stores user identity, credentials, verification state, and profile info.
 
-| Column | Data Type | Constraints | Description |
-| :--- | :--- | :--- | :--- |
-| `id` | `uuid` | `PRIMARY KEY`, Default `uuid_generate_v4()` | Unique user identifier |
-| `email` | `varchar(150)` | `UNIQUE`, `NOT NULL` | User email address |
-| `username` | `varchar(150)` | `UNIQUE`, `NOT NULL` | Unique public handle |
-| `password` | `varchar` | `NOT NULL` | Bcrypt password hash |
-| `full_name` | `varchar(150)` | `NOT NULL` | User's display name |
-| `avatar_url` | `varchar` | `NULLABLE` | S3/CDN URL to profile avatar |
-| `is_email_verified` | `boolean` | `NOT NULL`, Default `false` | Gatekeeper flag for login |
-| `status` | `enum` | `NOT NULL`, Default `'ACTIVE'` | `'ACTIVE'`, `'INACTIVE'`, `'SUSPENDED'` |
-| `created_at` | `timestamptz` | `NOT NULL`, Default `now()` | Record creation timestamp |
-| `updated_at` | `timestamptz` | `NOT NULL`, Default `now()` | Record last update timestamp |
+| Column              | Data Type      | Constraints                                 | Description                             |
+| :------------------ | :------------- | :------------------------------------------ | :-------------------------------------- |
+| `id`                | `uuid`         | `PRIMARY KEY`, Default `uuid_generate_v4()` | Unique user identifier                  |
+| `email`             | `varchar(150)` | `UNIQUE`, `NOT NULL`                        | User email address                      |
+| `username`          | `varchar(150)` | `UNIQUE`, `NOT NULL`                        | Unique public handle                    |
+| `password`          | `varchar`      | `NOT NULL`                                  | Bcrypt password hash                    |
+| `full_name`         | `varchar(150)` | `NOT NULL`                                  | User's display name                     |
+| `avatar_url`        | `varchar`      | `NULLABLE`                                  | S3/CDN URL to profile avatar            |
+| `is_email_verified` | `boolean`      | `NOT NULL`, Default `false`                 | Gatekeeper flag for login               |
+| `status`            | `enum`         | `NOT NULL`, Default `'ACTIVE'`              | `'ACTIVE'`, `'INACTIVE'`, `'SUSPENDED'` |
+| `created_at`        | `timestamptz`  | `NOT NULL`, Default `now()`                 | Record creation timestamp               |
+| `updated_at`        | `timestamptz`  | `NOT NULL`, Default `now()`                 | Record last update timestamp            |
 
 #### 2. Table: `auth.roles`
+
 Defines permission levels.
 
-| Column | Data Type | Constraints | Description |
-| :--- | :--- | :--- | :--- |
-| `id` | `uuid` | `PRIMARY KEY`, Default `uuid_generate_v4()` | Unique role identifier |
-| `name` | `enum` | `UNIQUE`, `NOT NULL` | `'SUPER_ADMIN'`, `'ADMIN'`, `'USER'` |
-| `description` | `varchar(255)` | `NULLABLE` | Human-readable role description |
-| `created_at` | `timestamptz` | `NOT NULL`, Default `now()` | Record creation timestamp |
-| `updated_at` | `timestamptz` | `NOT NULL`, Default `now()` | Record last update timestamp |
+| Column        | Data Type      | Constraints                                 | Description                          |
+| :------------ | :------------- | :------------------------------------------ | :----------------------------------- |
+| `id`          | `uuid`         | `PRIMARY KEY`, Default `uuid_generate_v4()` | Unique role identifier               |
+| `name`        | `enum`         | `UNIQUE`, `NOT NULL`                        | `'SUPER_ADMIN'`, `'ADMIN'`, `'USER'` |
+| `description` | `varchar(255)` | `NULLABLE`                                  | Human-readable role description      |
+| `created_at`  | `timestamptz`  | `NOT NULL`, Default `now()`                 | Record creation timestamp            |
+| `updated_at`  | `timestamptz`  | `NOT NULL`, Default `now()`                 | Record last update timestamp         |
 
 #### 3. Table: `auth.user_roles`
+
 Junction table linking users to roles (Many-to-Many).
 
-| Column | Data Type | Constraints | Description |
-| :--- | :--- | :--- | :--- |
-| `id` | `uuid` | `PRIMARY KEY`, Default `uuid_generate_v4()` | Unique junction identifier |
-| `user_id` | `uuid` | `FK -> auth.users(id) ON DELETE CASCADE` | Target user ID |
-| `role_id` | `uuid` | `FK -> auth.roles(id)` | Target role ID |
-| `assigned_at` | `timestamptz` | `NOT NULL`, Default `now()` | Timestamp when role was assigned |
+| Column        | Data Type     | Constraints                                 | Description                      |
+| :------------ | :------------ | :------------------------------------------ | :------------------------------- |
+| `id`          | `uuid`        | `PRIMARY KEY`, Default `uuid_generate_v4()` | Unique junction identifier       |
+| `user_id`     | `uuid`        | `FK -> auth.users(id) ON DELETE CASCADE`    | Target user ID                   |
+| `role_id`     | `uuid`        | `FK -> auth.roles(id)`                      | Target role ID                   |
+| `assigned_at` | `timestamptz` | `NOT NULL`, Default `now()`                 | Timestamp when role was assigned |
 
 #### 4. Table: `auth.refresh_tokens`
+
 Stores active and revoked refresh token sessions.
 
-| Column | Data Type | Constraints | Description |
-| :--- | :--- | :--- | :--- |
-| `id` | `uuid` | `PRIMARY KEY`, Default `uuid_generate_v4()` | Unique session identifier |
-| `user_id` | `uuid` | `FK -> auth.users(id) ON DELETE CASCADE` | Associated user |
-| `token_hash` | `varchar` | `UNIQUE`, `NOT NULL` | SHA-256 hash of refresh token |
-| `device_name` | `varchar(100)` | `NULLABLE` | Parsed or client-supplied device name |
-| `ip_address` | `varchar(45)` | `NULLABLE` | Client IPv4 or IPv6 address |
-| `user_agent` | `text` | `NULLABLE` | Raw HTTP User-Agent string |
-| `last_used_at` | `timestamptz` | `NULLABLE` | Timestamp of last usage |
-| `expires_at` | `timestamptz` | `NOT NULL` | Token expiration timestamp (30 days) |
-| `revoked_at` | `timestamptz` | `NULLABLE` | Revocation timestamp (rotation/logout) |
+| Column         | Data Type      | Constraints                                 | Description                            |
+| :------------- | :------------- | :------------------------------------------ | :------------------------------------- |
+| `id`           | `uuid`         | `PRIMARY KEY`, Default `uuid_generate_v4()` | Unique session identifier              |
+| `user_id`      | `uuid`         | `FK -> auth.users(id) ON DELETE CASCADE`    | Associated user                        |
+| `token_hash`   | `varchar`      | `UNIQUE`, `NOT NULL`                        | SHA-256 hash of refresh token          |
+| `device_name`  | `varchar(100)` | `NULLABLE`                                  | Parsed or client-supplied device name  |
+| `ip_address`   | `varchar(45)`  | `NULLABLE`                                  | Client IPv4 or IPv6 address            |
+| `user_agent`   | `text`         | `NULLABLE`                                  | Raw HTTP User-Agent string             |
+| `last_used_at` | `timestamptz`  | `NULLABLE`                                  | Timestamp of last usage                |
+| `expires_at`   | `timestamptz`  | `NOT NULL`                                  | Token expiration timestamp (30 days)   |
+| `revoked_at`   | `timestamptz`  | `NULLABLE`                                  | Revocation timestamp (rotation/logout) |
 
 #### 5. Table: `auth.otp_verifications`
+
 Manages verification and password reset OTP codes.
 
-| Column | Data Type | Constraints | Description |
-| :--- | :--- | :--- | :--- |
-| `id` | `uuid` | `PRIMARY KEY`, Default `uuid_generate_v4()` | Unique OTP record ID |
-| `user_id` | `uuid` | `FK -> auth.users(id) ON DELETE CASCADE` | Optional associated user ID |
-| `email` | `varchar(150)` | `NOT NULL` | Email recipient |
-| `otp_code` | `varchar(255)` | `NOT NULL` | Bcrypt hash of 6-digit OTP code |
-| `purpose` | `enum` | `NOT NULL` | `'REGISTER'`, `'LOGIN'`, `'FORGOT_PASSWORD'` |
-| `attempts` | `integer` | `NOT NULL`, Default `0` | Number of verification attempts |
-| `verified` | `boolean` | `NOT NULL`, Default `false` | Whether OTP was successfully redeemed |
-| `expires_at` | `timestamptz` | `NOT NULL` | Expiration timestamp (10 minutes) |
-| `verified_at` | `timestamptz` | `NULLABLE` | Redemption timestamp |
-
+| Column        | Data Type      | Constraints                                 | Description                                  |
+| :------------ | :------------- | :------------------------------------------ | :------------------------------------------- |
+| `id`          | `uuid`         | `PRIMARY KEY`, Default `uuid_generate_v4()` | Unique OTP record ID                         |
+| `user_id`     | `uuid`         | `FK -> auth.users(id) ON DELETE CASCADE`    | Optional associated user ID                  |
+| `email`       | `varchar(150)` | `NOT NULL`                                  | Email recipient                              |
+| `otp_code`    | `varchar(255)` | `NOT NULL`                                  | Bcrypt hash of 6-digit OTP code              |
+| `purpose`     | `enum`         | `NOT NULL`                                  | `'REGISTER'`, `'LOGIN'`, `'FORGOT_PASSWORD'` |
+| `attempts`    | `integer`      | `NOT NULL`, Default `0`                     | Number of verification attempts              |
+| `verified`    | `boolean`      | `NOT NULL`, Default `false`                 | Whether OTP was successfully redeemed        |
+| `expires_at`  | `timestamptz`  | `NOT NULL`                                  | Expiration timestamp (10 minutes)            |
+| `verified_at` | `timestamptz`  | `NULLABLE`                                  | Redemption timestamp                         |
 
 ---
 
@@ -620,7 +653,7 @@ erDiagram
     "catalog.book_series" ||--o{ "catalog.volumes" : "contains (1:N)"
     "catalog.book_series" ||--o{ "catalog.books" : "has (1:N)"
     "catalog.book_series" ||--o{ "catalog.media_assets" : "has banners/covers"
-    
+
     "catalog.volumes" ||--o{ "catalog.books" : "groups (0..1:N)"
     "catalog.volumes" ||--o{ "catalog.media_assets" : "has covers"
 
@@ -709,127 +742,134 @@ erDiagram
 ### Catalog Data Dictionary
 
 #### 6. Table: `catalog.book_series`
+
 Root manga/comic/novel series entity.
 
-| Column | Data Type | Constraints | Description |
-| :--- | :--- | :--- | :--- |
-| `id` | `uuid` | `PRIMARY KEY`, Default `uuid_generate_v4()` | Unique series ID |
-| `name` | `varchar(255)` | `NOT NULL` | Franchise series title |
-| `slug` | `varchar(255)` | `UNIQUE`, `NOT NULL`, Indexed | SEO-friendly URL slug |
-| `description` | `text` | `NULLABLE` | Series synopsis |
-| `status` | `enum` | Default `DRAFT` | `DRAFT`, `ONGOING`, `COMPLETED`, `HIATUS`, `PUBLISHED`, `ARCHIVED` |
-| `created_at` | `timestamptz` | `NOT NULL` | Creation timestamp |
-| `updated_at` | `timestamptz` | `NOT NULL` | Last update timestamp |
-| `deleted_at` | `timestamptz` | `NULLABLE` | Soft delete timestamp |
+| Column        | Data Type      | Constraints                                 | Description                                                        |
+| :------------ | :------------- | :------------------------------------------ | :----------------------------------------------------------------- |
+| `id`          | `uuid`         | `PRIMARY KEY`, Default `uuid_generate_v4()` | Unique series ID                                                   |
+| `name`        | `varchar(255)` | `NOT NULL`                                  | Franchise series title                                             |
+| `slug`        | `varchar(255)` | `UNIQUE`, `NOT NULL`, Indexed               | SEO-friendly URL slug                                              |
+| `description` | `text`         | `NULLABLE`                                  | Series synopsis                                                    |
+| `status`      | `enum`         | Default `DRAFT`                             | `DRAFT`, `ONGOING`, `COMPLETED`, `HIATUS`, `PUBLISHED`, `ARCHIVED` |
+| `created_at`  | `timestamptz`  | `NOT NULL`                                  | Creation timestamp                                                 |
+| `updated_at`  | `timestamptz`  | `NOT NULL`                                  | Last update timestamp                                              |
+| `deleted_at`  | `timestamptz`  | `NULLABLE`                                  | Soft delete timestamp                                              |
 
 #### 7. Table: `catalog.volumes`
+
 Represents an optional volume grouping within a series.
 
-| Column | Data Type | Constraints | Description |
-| :--- | :--- | :--- | :--- |
-| `id` | `uuid` | `PRIMARY KEY`, Default `uuid_generate_v4()` | Unique volume ID |
-| `series_id` | `uuid` | `FK -> catalog.book_series(id) ON DELETE CASCADE` | Parent series |
-| `volume_number`| `numeric(5, 2)` | `NOT NULL` | Volume number (supports decimals like 0.5) |
-| `title` | `varchar(255)` | `NULLABLE` | Optional volume subtitle |
-| `slug` | `varchar(255)` | `NOT NULL`, Indexed | Volume slug |
-| `description` | `text` | `NULLABLE` | Volume synopsis |
-| `sort_order` | `integer` | Default `0`, Indexed | Display sort order |
-| `release_date` | `date` | `NULLABLE` | Official release date |
-| `status` | `enum` | Default `DRAFT` | `DRAFT`, `PUBLISHED`, `ARCHIVED` |
-| `published_at` | `timestamptz` | `NULLABLE` | Publication timestamp |
-| `deleted_at` | `timestamptz` | `NULLABLE` | Soft delete timestamp |
+| Column          | Data Type       | Constraints                                       | Description                                |
+| :-------------- | :-------------- | :------------------------------------------------ | :----------------------------------------- |
+| `id`            | `uuid`          | `PRIMARY KEY`, Default `uuid_generate_v4()`       | Unique volume ID                           |
+| `series_id`     | `uuid`          | `FK -> catalog.book_series(id) ON DELETE CASCADE` | Parent series                              |
+| `volume_number` | `numeric(5, 2)` | `NOT NULL`                                        | Volume number (supports decimals like 0.5) |
+| `title`         | `varchar(255)`  | `NULLABLE`                                        | Optional volume subtitle                   |
+| `slug`          | `varchar(255)`  | `NOT NULL`, Indexed                               | Volume slug                                |
+| `description`   | `text`          | `NULLABLE`                                        | Volume synopsis                            |
+| `sort_order`    | `integer`       | Default `0`, Indexed                              | Display sort order                         |
+| `release_date`  | `date`          | `NULLABLE`                                        | Official release date                      |
+| `status`        | `enum`          | Default `DRAFT`                                   | `DRAFT`, `PUBLISHED`, `ARCHIVED`           |
+| `published_at`  | `timestamptz`   | `NULLABLE`                                        | Publication timestamp                      |
+| `deleted_at`    | `timestamptz`   | `NULLABLE`                                        | Soft delete timestamp                      |
 
-*Constraints*: `UNIQUE(series_id, volume_number)`, `INDEX(series_id, sort_order)`.
+_Constraints_: `UNIQUE(series_id, volume_number)`, `INDEX(series_id, sort_order)`.
 
 #### 8. Table: `catalog.books`
+
 The digital readable edition/content item.
 
-| Column | Data Type | Constraints | Description |
-| :--- | :--- | :--- | :--- |
-| `id` | `uuid` | `PRIMARY KEY`, Default `uuid_generate_v4()` | Unique book ID |
-| `series_id` | `uuid` | `FK -> catalog.book_series(id) ON DELETE RESTRICT` | Required parent series |
-| `volume_id` | `uuid` | `FK -> catalog.volumes(id) ON DELETE SET NULL` | Optional parent volume |
-| `title` | `varchar(255)` | `NOT NULL` | Book title |
-| `japanese_title`| `varchar(255)` | `NULLABLE` | Native original script title |
-| `slug` | `varchar(255)` | `UNIQUE`, `NOT NULL`, Indexed | Unique URL identifier |
-| `description` | `text` | `NULLABLE` | Content overview |
-| `author_id` | `uuid` | `FK -> catalog.authors(id) ON DELETE SET NULL` | Author reference |
-| `artist_id` | `uuid` | `FK -> catalog.artists(id) ON DELETE SET NULL` | Illustrator reference |
-| `language_id` | `uuid` | `FK -> catalog.languages(id) ON DELETE RESTRICT` | Content language |
-| `category_id` | `uuid` | `FK -> catalog.categories(id) ON DELETE RESTRICT`| Content category (Manga/Novel) |
-| `status` | `enum` | Default `DRAFT` | `DRAFT`, `PUBLISHED`, `UNPUBLISHED`, `ARCHIVED` |
-| `pricing_model`| `enum` | Default `FREE` | `FREE`, `PER_PAGE`, `PER_CHAPTER`, `PER_BOOK`, `SUBSCRIPTION` |
-| `default_coin_per_page` | `integer` | Default `0` | Default unlocking cost per page |
-| `default_free_chapters` | `integer` | Default `0` | Number of starting free chapters |
-| `default_free_pages` | `integer` | Default `0` | Free preview page count |
-| `is_premium` | `boolean` | Default `false` | Flag for VIP/subscriber priority |
-| `total_chapters` | `integer` | Default `0` | Cached chapter counter |
-| `total_pages` | `integer` | Default `0` | Cached page counter |
-| `average_rating` | `numeric(3, 2)`| Default `0.00` | Rating aggregated score |
-| `total_views` | `bigint` | Default `0` | Aggregate reader view count |
-| `release_date` | `date` | `NULLABLE` | Content release date |
-| `published_at` | `timestamptz` | `NULLABLE` | Publication timestamp |
-| `created_by` | `uuid` | `NULLABLE`, Indexed | Auditing: Admin user creator ID |
-| `updated_by` | `uuid` | `NULLABLE` | Auditing: Admin user editor ID |
-| `deleted_at` | `timestamptz` | `NULLABLE` | Soft delete timestamp |
+| Column                  | Data Type       | Constraints                                        | Description                                                   |
+| :---------------------- | :-------------- | :------------------------------------------------- | :------------------------------------------------------------ |
+| `id`                    | `uuid`          | `PRIMARY KEY`, Default `uuid_generate_v4()`        | Unique book ID                                                |
+| `series_id`             | `uuid`          | `FK -> catalog.book_series(id) ON DELETE RESTRICT` | Required parent series                                        |
+| `volume_id`             | `uuid`          | `FK -> catalog.volumes(id) ON DELETE SET NULL`     | Optional parent volume                                        |
+| `title`                 | `varchar(255)`  | `NOT NULL`                                         | Book title                                                    |
+| `japanese_title`        | `varchar(255)`  | `NULLABLE`                                         | Native original script title                                  |
+| `slug`                  | `varchar(255)`  | `UNIQUE`, `NOT NULL`, Indexed                      | Unique URL identifier                                         |
+| `description`           | `text`          | `NULLABLE`                                         | Content overview                                              |
+| `author_id`             | `uuid`          | `FK -> catalog.authors(id) ON DELETE SET NULL`     | Author reference                                              |
+| `artist_id`             | `uuid`          | `FK -> catalog.artists(id) ON DELETE SET NULL`     | Illustrator reference                                         |
+| `language_id`           | `uuid`          | `FK -> catalog.languages(id) ON DELETE RESTRICT`   | Content language                                              |
+| `category_id`           | `uuid`          | `FK -> catalog.categories(id) ON DELETE RESTRICT`  | Content category (Manga/Novel)                                |
+| `status`                | `enum`          | Default `DRAFT`                                    | `DRAFT`, `PUBLISHED`, `UNPUBLISHED`, `ARCHIVED`               |
+| `pricing_model`         | `enum`          | Default `FREE`                                     | `FREE`, `PER_PAGE`, `PER_CHAPTER`, `PER_BOOK`, `SUBSCRIPTION` |
+| `default_coin_per_page` | `integer`       | Default `0`                                        | Default unlocking cost per page                               |
+| `default_free_chapters` | `integer`       | Default `0`                                        | Number of starting free chapters                              |
+| `default_free_pages`    | `integer`       | Default `0`                                        | Free preview page count                                       |
+| `is_premium`            | `boolean`       | Default `false`                                    | Flag for VIP/subscriber priority                              |
+| `total_chapters`        | `integer`       | Default `0`                                        | Cached chapter counter                                        |
+| `total_pages`           | `integer`       | Default `0`                                        | Cached page counter                                           |
+| `average_rating`        | `numeric(3, 2)` | Default `0.00`                                     | Rating aggregated score                                       |
+| `total_views`           | `bigint`        | Default `0`                                        | Aggregate reader view count                                   |
+| `release_date`          | `date`          | `NULLABLE`                                         | Content release date                                          |
+| `published_at`          | `timestamptz`   | `NULLABLE`                                         | Publication timestamp                                         |
+| `created_by`            | `uuid`          | `NULLABLE`, Indexed                                | Auditing: Admin user creator ID                               |
+| `updated_by`            | `uuid`          | `NULLABLE`                                         | Auditing: Admin user editor ID                                |
+| `deleted_at`            | `timestamptz`   | `NULLABLE`                                         | Soft delete timestamp                                         |
 
 #### 9. Table: `catalog.chapters`
+
 Chapter configuration and pricing overrides.
 
-| Column | Data Type | Constraints | Description |
-| :--- | :--- | :--- | :--- |
-| `id` | `uuid` | `PRIMARY KEY`, Default `uuid_generate_v4()` | Unique chapter ID |
-| `book_id` | `uuid` | `FK -> catalog.books(id) ON DELETE CASCADE` | Parent book |
-| `chapter_number`| `numeric(6, 2)` | `NOT NULL` | Chapter number (supports 10.5) |
-| `title` | `varchar(255)` | `NULLABLE` | Optional chapter title |
-| `sort_order` | `integer` | Default `0` | Deterministic sequence order |
-| `pricing_model`| `enum` | Default `FREE` | `FREE`, `PARTIAL_FREE`, `PAID` |
-| `free_page_count`| `integer` | Default `0` | Free pages in PARTIAL_FREE mode |
-| `coin_cost` | `integer` | Default `0` | Required coin unlocking fee |
-| `page_count` | `integer` | Default `0` | Total page count |
-| `published` | `boolean` | Default `false` | Publication visibility flag |
-| `published_at` | `timestamptz` | `NULLABLE` | Publication timestamp |
-| `deleted_at` | `timestamptz` | `NULLABLE` | Soft delete timestamp |
+| Column            | Data Type       | Constraints                                 | Description                     |
+| :---------------- | :-------------- | :------------------------------------------ | :------------------------------ |
+| `id`              | `uuid`          | `PRIMARY KEY`, Default `uuid_generate_v4()` | Unique chapter ID               |
+| `book_id`         | `uuid`          | `FK -> catalog.books(id) ON DELETE CASCADE` | Parent book                     |
+| `chapter_number`  | `numeric(6, 2)` | `NOT NULL`                                  | Chapter number (supports 10.5)  |
+| `title`           | `varchar(255)`  | `NULLABLE`                                  | Optional chapter title          |
+| `sort_order`      | `integer`       | Default `0`                                 | Deterministic sequence order    |
+| `pricing_model`   | `enum`          | Default `FREE`                              | `FREE`, `PARTIAL_FREE`, `PAID`  |
+| `free_page_count` | `integer`       | Default `0`                                 | Free pages in PARTIAL_FREE mode |
+| `coin_cost`       | `integer`       | Default `0`                                 | Required coin unlocking fee     |
+| `page_count`      | `integer`       | Default `0`                                 | Total page count                |
+| `published`       | `boolean`       | Default `false`                             | Publication visibility flag     |
+| `published_at`    | `timestamptz`   | `NULLABLE`                                  | Publication timestamp           |
+| `deleted_at`      | `timestamptz`   | `NULLABLE`                                  | Soft delete timestamp           |
 
-*Constraints*: `INDEX(book_id, sort_order)`, `INDEX(book_id, chapter_number)`.
+_Constraints_: `INDEX(book_id, sort_order)`, `INDEX(book_id, chapter_number)`.
 
 #### 10. Table: `catalog.pages`
+
 Deterministic page assets, dimensions, and DRM storage references.
 
-| Column | Data Type | Constraints | Description |
-| :--- | :--- | :--- | :--- |
-| `id` | `uuid` | `PRIMARY KEY`, Default `uuid_generate_v4()` | Unique page ID |
-| `chapter_id` | `uuid` | `FK -> catalog.chapters(id) ON DELETE CASCADE`| Parent chapter |
-| `page_number` | `integer` | `NOT NULL` | Human-readable page number (1-indexed) |
-| `sort_order` | `integer` | Default `0`, Indexed | Reading canvas sequence order |
-| `storage_key` | `varchar(500)` | `NOT NULL` | Private Cloudflare R2 / S3 object key |
-| `encrypted_key`| `varchar(500)` | `NULLABLE` | AES-256 DRM encryption key metadata |
-| `width` | `integer` | `NULLABLE` | Pixel image width |
-| `height` | `integer` | `NULLABLE` | Pixel image height |
-| `mime_type` | `varchar(50)` | `NULLABLE` | MIME type (e.g., image/webp) |
-| `file_size` | `integer` | `NULLABLE` | Raw file size in bytes |
-| `checksum` | `varchar(64)` | `NULLABLE` | SHA-256 file integrity checksum |
+| Column          | Data Type      | Constraints                                    | Description                            |
+| :-------------- | :------------- | :--------------------------------------------- | :------------------------------------- |
+| `id`            | `uuid`         | `PRIMARY KEY`, Default `uuid_generate_v4()`    | Unique page ID                         |
+| `chapter_id`    | `uuid`         | `FK -> catalog.chapters(id) ON DELETE CASCADE` | Parent chapter                         |
+| `page_number`   | `integer`      | `NOT NULL`                                     | Human-readable page number (1-indexed) |
+| `sort_order`    | `integer`      | Default `0`, Indexed                           | Reading canvas sequence order          |
+| `storage_key`   | `varchar(500)` | `NOT NULL`                                     | Private Cloudflare R2 / S3 object key  |
+| `encrypted_key` | `varchar(500)` | `NULLABLE`                                     | AES-256 DRM encryption key metadata    |
+| `width`         | `integer`      | `NULLABLE`                                     | Pixel image width                      |
+| `height`        | `integer`      | `NULLABLE`                                     | Pixel image height                     |
+| `mime_type`     | `varchar(50)`  | `NULLABLE`                                     | MIME type (e.g., image/webp)           |
+| `file_size`     | `integer`      | `NULLABLE`                                     | Raw file size in bytes                 |
+| `checksum`      | `varchar(64)`  | `NULLABLE`                                     | SHA-256 file integrity checksum        |
 
-*Constraints*: `UNIQUE(chapter_id, page_number)`, `INDEX(chapter_id, sort_order)`.
+_Constraints_: `UNIQUE(chapter_id, page_number)`, `INDEX(chapter_id, sort_order)`.
 
 #### 11. Table: `catalog.media_assets`
+
 Media references for franchise covers, banners, and promotional artwork.
 
-| Column | Data Type | Constraints | Description |
-| :--- | :--- | :--- | :--- |
-| `id` | `uuid` | `PRIMARY KEY`, Default `uuid_generate_v4()` | Unique asset ID |
-| `asset_type` | `enum` | `NOT NULL` | `COVER`, `BANNER`, `THUMBNAIL`, `PROMOTION` |
-| `storage_key` | `varchar(500)` | `NOT NULL` | Private object storage key |
-| `mime_type` | `varchar(50)` | `NULLABLE` | Media MIME type |
-| `file_size` | `integer` | `NULLABLE` | File byte size |
-| `width` / `height` | `integer` | `NULLABLE` | Image dimensions |
-| `sort_order` | `integer` | Default `0` | Carousel display order |
-| `alt_text` | `varchar(255)` | `NULLABLE` | Accessibility text description |
-| `series_id` | `uuid` | `FK -> catalog.book_series(id) ON DELETE CASCADE` | Optional series link |
-| `volume_id` | `uuid` | `FK -> catalog.volumes(id) ON DELETE CASCADE` | Optional volume link |
-| `book_id` | `uuid` | `FK -> catalog.books(id) ON DELETE CASCADE` | Optional book link |
+| Column             | Data Type      | Constraints                                       | Description                                 |
+| :----------------- | :------------- | :------------------------------------------------ | :------------------------------------------ |
+| `id`               | `uuid`         | `PRIMARY KEY`, Default `uuid_generate_v4()`       | Unique asset ID                             |
+| `asset_type`       | `enum`         | `NOT NULL`                                        | `COVER`, `BANNER`, `THUMBNAIL`, `PROMOTION` |
+| `storage_key`      | `varchar(500)` | `NOT NULL`                                        | Private object storage key                  |
+| `mime_type`        | `varchar(50)`  | `NULLABLE`                                        | Media MIME type                             |
+| `file_size`        | `integer`      | `NULLABLE`                                        | File byte size                              |
+| `width` / `height` | `integer`      | `NULLABLE`                                        | Image dimensions                            |
+| `sort_order`       | `integer`      | Default `0`                                       | Carousel display order                      |
+| `alt_text`         | `varchar(255)` | `NULLABLE`                                        | Accessibility text description              |
+| `series_id`        | `uuid`         | `FK -> catalog.book_series(id) ON DELETE CASCADE` | Optional series link                        |
+| `volume_id`        | `uuid`         | `FK -> catalog.volumes(id) ON DELETE CASCADE`     | Optional volume link                        |
+| `book_id`          | `uuid`         | `FK -> catalog.books(id) ON DELETE CASCADE`       | Optional book link                          |
 
 #### 12–14. Reference & Junction Tables
+
 - **`catalog.authors`**: `id`, `name`, `slug` (UK), `bio`, `profile_image`, timestamps, `deleted_at`.
 - **`catalog.artists`**: `id`, `name`, `slug` (UK), `bio`, `profile_image`, timestamps, `deleted_at`.
 - **`catalog.languages`**: `id`, `name` (UK), `code` (UK, e.g., `en`, `ja`), timestamps.
@@ -838,7 +878,6 @@ Media references for franchise covers, banners, and promotional artwork.
 - **`catalog.tags`**: `id`, `name` (UK), `slug` (UK, e.g., `magic`, `pirates`), `description`, timestamps.
 - **`catalog.book_genres`**: Junction with `UNIQUE(book_id, genre_id)`, cascades on deletion.
 - **`catalog.book_tags`**: Junction with `UNIQUE(book_id, tag_id)`, cascades on deletion.
-
 
 ---
 
@@ -870,14 +909,14 @@ pnpm migration:revert
 
 Seeders check for the existence of baseline records before inserting, making them safe to run repeatedly without producing duplicates or constraint violations.
 
-* **Automatic Boot Seeding**: On application startup, `DatabaseSeederService` automatically executes all registered baseline seeders.
-* **Registered Seeders**:
+- **Automatic Boot Seeding**: On application startup, `DatabaseSeederService` automatically executes all registered baseline seeders.
+- **Registered Seeders**:
   1. `RoleSeeder`: Baseline system roles (`SUPER_ADMIN`, `ADMIN`, `USER`).
   2. `LanguageSeeder`: Core publishing languages (`English`, `Japanese`, `French`, `German`).
   3. `CategorySeeder`: Content formats (`Manga`, `Manhwa`, `Manhua`, `Novel`, `Light Novel`).
   4. `GenreSeeder`: Core catalog genres (`Action`, `Adventure`, `Comedy`, `Drama`, `Fantasy`, `Romance`, `Horror`, `Mystery`, `Sci-Fi`).
   5. `TagSeeder`: Content theme tags (`School`, `Magic`, `Revenge`, `Time Travel`, `Pirates`, `Supernatural`).
-* **Manual Seeding CLI**:
+- **Manual Seeding CLI**:
   ```bash
   # Run all registered seeders (Roles, Languages, Categories, Genres, Tags)
   pnpm seed
@@ -912,6 +951,7 @@ Follow this step-by-step walkthrough to get the application running locally from
 ### Prerequisites
 
 Ensure you have the following installed on your system:
+
 - **Node.js**: `v20.x` or `v22.x` (LTS recommended)
 - **pnpm**: `v9.x` or higher (`npm install -g pnpm`)
 - **PostgreSQL**: `v14+` running locally or via Docker
@@ -995,7 +1035,8 @@ Create the PostgreSQL database if it does not already exist:
 psql -U postgres -c "CREATE DATABASE manga_ebook_dev;"
 ```
 
-*Or with Docker:*
+_Or with Docker:_
+
 ```bash
 docker run --name kuroyomi-postgres -e POSTGRES_PASSWORD=root -e POSTGRES_DB=manga_ebook_dev -p 5432:5432 -d postgres:16-alpine
 ```
@@ -1014,7 +1055,7 @@ pnpm migration:run
 pnpm seed
 ```
 
-*(Alternatively, starting the dev server automatically executes pending migrations and seeders).*
+_(Alternatively, starting the dev server automatically executes pending migrations and seeders)._
 
 ---
 
@@ -1027,6 +1068,7 @@ pnpm start:dev
 ```
 
 When started successfully, you will see:
+
 ```text
 [Nest] LOG [NestFactory] Starting Nest application...
 [Nest] LOG [DatabaseSeederService] 🌱 Checking baseline database seed data...
@@ -1037,12 +1079,12 @@ When started successfully, you will see:
 
 #### Running in Other Environments
 
-| Environment | Command | Loaded Environment File |
-| :--- | :--- | :--- |
-| **Development** | `pnpm start:dev` | `.env.development` |
-| **Staging** | `pnpm start:staging` | `.env.staging` |
-| **Production Build** | `pnpm build && pnpm start:prod` | `.env.production` |
-| **Debug Mode** | `pnpm start:debug` | `.env.development` |
+| Environment          | Command                         | Loaded Environment File |
+| :------------------- | :------------------------------ | :---------------------- |
+| **Development**      | `pnpm start:dev`                | `.env.development`      |
+| **Staging**          | `pnpm start:staging`            | `.env.staging`          |
+| **Production Build** | `pnpm build && pnpm start:prod` | `.env.production`       |
+| **Debug Mode**       | `pnpm start:debug`              | `.env.development`      |
 
 ---
 
@@ -1070,6 +1112,7 @@ Creates a new user in the database with `isEmailVerified = false`, assigns the d
 - **HTTP Status**: `201 Created`
 
 #### cURL Request
+
 ```bash
 curl -X POST http://localhost:3000/api/auth/register \
   -H "Content-Type: application/json" \
@@ -1083,6 +1126,7 @@ curl -X POST http://localhost:3000/api/auth/register \
 ```
 
 #### JSON Response (`201 Created`)
+
 ```json
 {
   "message": "Registration successful. Please verify your email using the OTP sent to your email.",
@@ -1101,6 +1145,7 @@ Validates the 6-digit OTP sent via email. Sets `isEmailVerified = true` upon suc
 - **HTTP Status**: `200 OK`
 
 #### cURL Request
+
 ```bash
 curl -X POST http://localhost:3000/api/auth/verify-email \
   -H "Content-Type: application/json" \
@@ -1111,6 +1156,7 @@ curl -X POST http://localhost:3000/api/auth/verify-email \
 ```
 
 #### JSON Response (`200 OK`)
+
 ```json
 {
   "message": "Email verified successfully"
@@ -1128,6 +1174,7 @@ Generates a fresh OTP code and dispatches a new verification email if the accoun
 - **HTTP Status**: `200 OK`
 
 #### cURL Request
+
 ```bash
 curl -X POST http://localhost:3000/api/auth/resend-verification-otp \
   -H "Content-Type: application/json" \
@@ -1137,6 +1184,7 @@ curl -X POST http://localhost:3000/api/auth/resend-verification-otp \
 ```
 
 #### JSON Response (`200 OK`)
+
 ```json
 {
   "message": "Verification OTP has been sent to your email."
@@ -1154,6 +1202,7 @@ Authenticates email and password. Enforces `isEmailVerified === true`. Issues a 
 - **HTTP Status**: `200 OK`
 
 #### cURL Request
+
 ```bash
 curl -X POST http://localhost:3000/api/auth/login \
   -H "Content-Type: application/json" \
@@ -1166,6 +1215,7 @@ curl -X POST http://localhost:3000/api/auth/login \
 ```
 
 #### JSON Response (`200 OK`)
+
 ```json
 {
   "user": {
@@ -1207,12 +1257,14 @@ Fetches the complete, fresh user profile directly from PostgreSQL. This is the p
 - **HTTP Status**: `200 OK`
 
 #### cURL Request
+
 ```bash
 curl -X GET http://localhost:3000/api/users/me \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 ```
 
 #### JSON Response (`200 OK`)
+
 ```json
 {
   "id": "7b8e1f6e-9e2b-42b5-a3d8-55a5b5f25a3a",
@@ -1239,6 +1291,7 @@ Updates non-sensitive profile fields (`fullName`, `username`, `avatarUrl`). Prev
 - **HTTP Status**: `200 OK`
 
 #### cURL Request
+
 ```bash
 curl -X PATCH http://localhost:3000/api/users/me \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
@@ -1251,6 +1304,7 @@ curl -X PATCH http://localhost:3000/api/users/me \
 ```
 
 #### JSON Response (`200 OK`)
+
 ```json
 {
   "id": "7b8e1f6e-9e2b-42b5-a3d8-55a5b5f25a3a",
@@ -1277,6 +1331,7 @@ Allows an authenticated user to change their password by validating their curren
 - **HTTP Status**: `200 OK`
 
 #### cURL Request
+
 ```bash
 curl -X PATCH http://localhost:3000/api/users/me/password \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
@@ -1288,6 +1343,7 @@ curl -X PATCH http://localhost:3000/api/users/me/password \
 ```
 
 #### JSON Response (`200 OK`)
+
 ```json
 {
   "message": "Password changed successfully. All active sessions have been logged out for security."
@@ -1305,6 +1361,7 @@ Consumes and revokes the provided Refresh Token, issuing a brand-new Access Toke
 - **HTTP Status**: `200 OK`
 
 #### cURL Request
+
 ```bash
 curl -X POST http://localhost:3000/api/auth/refresh \
   -H "Content-Type: application/json" \
@@ -1315,6 +1372,7 @@ curl -X POST http://localhost:3000/api/auth/refresh \
 ```
 
 #### JSON Response (`200 OK`)
+
 ```json
 {
   "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9_NEW_ACCESS...",
@@ -1333,6 +1391,7 @@ Revokes the specific refresh token session associated with the current device.
 - **HTTP Status**: `204 No Content`
 
 #### cURL Request
+
 ```bash
 curl -X POST http://localhost:3000/api/auth/logout \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." \
@@ -1355,6 +1414,7 @@ Revokes **all active refresh token sessions** across all devices for the authent
 - **HTTP Status**: `204 No Content`
 
 #### cURL Request
+
 ```bash
 curl -X POST http://localhost:3000/api/auth/logout-all \
   -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
@@ -1373,6 +1433,7 @@ Dispatches a password reset OTP email. Returns an identical response regardless 
 - **HTTP Status**: `200 OK`
 
 #### cURL Request
+
 ```bash
 curl -X POST http://localhost:3000/api/auth/forgot-password \
   -H "Content-Type: application/json" \
@@ -1382,6 +1443,7 @@ curl -X POST http://localhost:3000/api/auth/forgot-password \
 ```
 
 #### JSON Response (`200 OK`)
+
 ```json
 {
   "message": "If the email exists, a password reset code has been sent."
@@ -1399,6 +1461,7 @@ Verifies the reset OTP, updates the user's password hash, and immediately termin
 - **HTTP Status**: `200 OK`
 
 #### cURL Request
+
 ```bash
 curl -X POST http://localhost:3000/api/auth/reset-password \
   -H "Content-Type: application/json" \
@@ -1410,6 +1473,7 @@ curl -X POST http://localhost:3000/api/auth/reset-password \
 ```
 
 #### JSON Response (`200 OK`)
+
 ```json
 {
   "message": "Password reset successfully"
@@ -1421,6 +1485,7 @@ curl -X POST http://localhost:3000/api/auth/reset-password \
 ### 6.3 Series Catalog Management
 
 #### 13. Create Franchise Series
+
 Creates a new franchise series root (Admin only).
 
 - **Endpoint**: `POST /api/series`
@@ -1428,6 +1493,7 @@ Creates a new franchise series root (Admin only).
 - **HTTP Status**: `201 Created`
 
 ##### cURL Request
+
 ```bash
 curl -X POST http://localhost:3000/api/series \
   -H "Authorization: Bearer <adminAccessToken>" \
@@ -1441,6 +1507,7 @@ curl -X POST http://localhost:3000/api/series \
 ```
 
 ##### JSON Response (`201 Created`)
+
 ```json
 {
   "id": "a0000000-0000-0000-0000-000000000001",
@@ -1456,25 +1523,28 @@ curl -X POST http://localhost:3000/api/series \
 ---
 
 #### 14. List Franchise Series
+
 Retrieves a paginated list of series with search, status filtering, and visibility scoping. Public users only receive published series.
 
 - **Endpoint**: `GET /api/series`
 - **Access**: Public / Authenticated
 - **HTTP Status**: `200 OK`
 - **Query Parameters**:
-  - `search` *(optional)*: Fuzzy search by series name or description.
-  - `status` *(optional, Admin only)*: `DRAFT | ONGOING | COMPLETED | HIATUS | PUBLISHED | ARCHIVED`.
-  - `page` *(optional, default: 1)*: Page number.
-  - `limit` *(optional, default: 20, max: 100)*: Items per page.
-  - `sortBy` *(optional, default: 'createdAt')*: `createdAt | name | status`.
-  - `sortOrder` *(optional, default: 'DESC')*: `ASC | DESC`.
+  - `search` _(optional)_: Fuzzy search by series name or description.
+  - `status` _(optional, Admin only)_: `DRAFT | ONGOING | COMPLETED | HIATUS | PUBLISHED | ARCHIVED`.
+  - `page` _(optional, default: 1)_: Page number.
+  - `limit` _(optional, default: 20, max: 100)_: Items per page.
+  - `sortBy` _(optional, default: 'createdAt')_: `createdAt | name | status`.
+  - `sortOrder` _(optional, default: 'DESC')_: `ASC | DESC`.
 
 ##### cURL Request
+
 ```bash
 curl -X GET "http://localhost:3000/api/series?search=Piece&page=1&limit=20"
 ```
 
 ##### JSON Response (`200 OK`)
+
 ```json
 {
   "data": [
@@ -1502,6 +1572,7 @@ curl -X GET "http://localhost:3000/api/series?search=Piece&page=1&limit=20"
 ---
 
 #### 15. Get Series by UUID or Slug
+
 Fetches a single series with joined volume, book, and media asset relations.
 
 - **Endpoint**: `GET /api/series/:id`
@@ -1510,6 +1581,7 @@ Fetches a single series with joined volume, book, and media asset relations.
 - **Parameters**: `id` can be a UUID (`a000...`) or URL slug (`one-piece`).
 
 ##### cURL Request
+
 ```bash
 curl -X GET http://localhost:3000/api/series/one-piece
 ```
@@ -1517,6 +1589,7 @@ curl -X GET http://localhost:3000/api/series/one-piece
 ---
 
 #### 16. Update Series
+
 Updates series metadata, slug, or status (Admin only).
 
 - **Endpoint**: `PATCH /api/series/:id`
@@ -1526,6 +1599,7 @@ Updates series metadata, slug, or status (Admin only).
 ---
 
 #### 17. Delete Series
+
 Soft-deletes a series by setting `deleted_at` timestamp (Admin only).
 
 - **Endpoint**: `DELETE /api/series/:id`
@@ -1537,6 +1611,7 @@ Soft-deletes a series by setting `deleted_at` timestamp (Admin only).
 ### 6.4 Volume Catalog Management
 
 #### 18. Create Volume in Series
+
 Creates a new volume grouping within a parent franchise series (Admin only).
 
 - **Endpoint**: `POST /api/volumes`
@@ -1544,6 +1619,7 @@ Creates a new volume grouping within a parent franchise series (Admin only).
 - **HTTP Status**: `201 Created`
 
 ##### cURL Request
+
 ```bash
 curl -X POST http://localhost:3000/api/volumes \
   -H "Authorization: Bearer <adminAccessToken>" \
@@ -1559,6 +1635,7 @@ curl -X POST http://localhost:3000/api/volumes \
 ```
 
 ##### JSON Response (`201 Created`)
+
 ```json
 {
   "id": "b0000000-0000-0000-0000-000000000001",
@@ -1577,23 +1654,25 @@ curl -X POST http://localhost:3000/api/volumes \
 ---
 
 #### 19. List Volumes
+
 Lists volumes with optional `seriesId` filtering, title search, pagination, and visibility scoping.
 
 - **Endpoint**: `GET /api/volumes`
 - **Access**: Public / Authenticated
 - **HTTP Status**: `200 OK`
 - **Query Parameters**:
-  - `seriesId` *(optional)*: Filter by parent series UUID.
-  - `search` *(optional)*: Fuzzy search by volume title or description.
-  - `status` *(optional, Admin only)*: `DRAFT | PUBLISHED | ARCHIVED`.
-  - `page` *(optional, default: 1)*: Page number.
-  - `limit` *(optional, default: 20, max: 100)*: Volumes per page.
-  - `sortBy` *(optional, default: 'sortOrder')*: `volumeNumber | sortOrder | createdAt | title`.
-  - `sortOrder` *(optional, default: 'ASC')*: `ASC | DESC`.
+  - `seriesId` _(optional)_: Filter by parent series UUID.
+  - `search` _(optional)_: Fuzzy search by volume title or description.
+  - `status` _(optional, Admin only)_: `DRAFT | PUBLISHED | ARCHIVED`.
+  - `page` _(optional, default: 1)_: Page number.
+  - `limit` _(optional, default: 20, max: 100)_: Volumes per page.
+  - `sortBy` _(optional, default: 'sortOrder')_: `volumeNumber | sortOrder | createdAt | title`.
+  - `sortOrder` _(optional, default: 'ASC')_: `ASC | DESC`.
 
 ---
 
 #### 20. Get Volume by UUID or Slug
+
 Fetches a single volume with joined series, book, and media asset relations.
 
 - **Endpoint**: `GET /api/volumes/:id`
@@ -1603,6 +1682,7 @@ Fetches a single volume with joined series, book, and media asset relations.
 ---
 
 #### 21. Update Volume
+
 Updates volume metadata or publishing status (Admin only).
 
 - **Endpoint**: `PATCH /api/volumes/:id`
@@ -1612,6 +1692,7 @@ Updates volume metadata or publishing status (Admin only).
 ---
 
 #### 22. Delete Volume
+
 Soft-deletes a volume by setting `deleted_at` timestamp (Admin only).
 
 - **Endpoint**: `DELETE /api/volumes/:id`
@@ -1623,6 +1704,7 @@ Soft-deletes a volume by setting `deleted_at` timestamp (Admin only).
 ### 6.5 Book Catalog Management
 
 #### 23. Create Book
+
 Creates a new digital edition/book with relational links to Series, Volume, Language, Category, Authors, Artists, Genres, and Tags (Admin only).
 
 - **Endpoint**: `POST /api/books`
@@ -1630,6 +1712,7 @@ Creates a new digital edition/book with relational links to Series, Volume, Lang
 - **HTTP Status**: `201 Created`
 
 ##### cURL Request
+
 ```bash
 curl -X POST http://localhost:3000/api/books \
   -H "Authorization: Bearer <adminAccessToken>" \
@@ -1649,6 +1732,7 @@ curl -X POST http://localhost:3000/api/books \
 ```
 
 ##### JSON Response (`201 Created`)
+
 ```json
 {
   "id": "e0000000-0000-0000-0000-000000000001",
@@ -1669,6 +1753,7 @@ curl -X POST http://localhost:3000/api/books \
 ---
 
 #### 24. List Books
+
 Lists books with comprehensive relational filtering (`seriesId`, `volumeId`, `languageId`, `categoryId`, `authorId`, `artistId`, `genreId`, `tagId`, `pricingModel`, `isPremium`), search, sorting, and pagination.
 
 - **Endpoint**: `GET /api/books`
@@ -1678,6 +1763,7 @@ Lists books with comprehensive relational filtering (`seriesId`, `volumeId`, `la
 ---
 
 #### 25. Get Book by UUID or Slug
+
 Fetches a single book with joined relational details including series, volume, language, category, author, artist, genres, and tags.
 
 - **Endpoint**: `GET /api/books/:id`
@@ -1687,6 +1773,7 @@ Fetches a single book with joined relational details including series, volume, l
 ---
 
 #### 26. Update Book
+
 Updates book metadata, pricing model, publication status, or relational associations (Admin only).
 
 - **Endpoint**: `PATCH /api/books/:id`
@@ -1696,6 +1783,7 @@ Updates book metadata, pricing model, publication status, or relational associat
 ---
 
 #### 27. Delete Book
+
 Soft-deletes a book by setting `deleted_at` timestamp (Admin only).
 
 - **Endpoint**: `DELETE /api/books/:id`
@@ -1705,6 +1793,7 @@ Soft-deletes a book by setting `deleted_at` timestamp (Admin only).
 ---
 
 #### 28. Generate Book Cover Upload URL
+
 Generates a short-lived presigned AWS S3 `PUT` URL for direct browser-to-S3 book cover image upload (Admin only).
 
 - **Endpoint**: `POST /api/books/:bookId/cover/upload-url`
@@ -1713,6 +1802,7 @@ Generates a short-lived presigned AWS S3 `PUT` URL for direct browser-to-S3 book
 - **Allowed Formats**: JPEG, PNG, WebP (Max size configured via `MAX_BOOK_COVER_SIZE_MB`, default 10MB)
 
 ##### Request Body
+
 ```json
 {
   "contentType": "image/png",
@@ -1721,6 +1811,7 @@ Generates a short-lived presigned AWS S3 `PUT` URL for direct browser-to-S3 book
 ```
 
 ##### Response (`200 OK`)
+
 ```json
 {
   "bookId": "e0000000-0000-0000-0000-000000000001",
@@ -1734,6 +1825,7 @@ Generates a short-lived presigned AWS S3 `PUT` URL for direct browser-to-S3 book
 ---
 
 #### 29. Complete Book Cover Upload
+
 Verifies the uploaded cover file in AWS S3 (via S3 `HeadObject` and binary magic-byte detection) and updates the book record (Admin only).
 
 - **Endpoint**: `POST /api/books/:bookId/cover/complete`
@@ -1741,6 +1833,7 @@ Verifies the uploaded cover file in AWS S3 (via S3 `HeadObject` and binary magic
 - **HTTP Status**: `200 OK`
 
 ##### Response (`200 OK`)
+
 Returns the updated Book object with `coverImageUrl` (presigned GET URL) populated.
 
 ---
@@ -1748,6 +1841,7 @@ Returns the updated Book object with `coverImageUrl` (presigned GET URL) populat
 ### 6.6 Chapter Catalog Management & S3 PDF Streaming
 
 #### 30. Create Chapter
+
 Creates a new chapter for a book with monetization pricing model, sort order, and page metadata (Admin only).
 
 - **Endpoint**: `POST /api/chapters`
@@ -1759,6 +1853,7 @@ Creates a new chapter for a book with monetization pricing model, sort order, an
   - `PAID`: Requires `coinCost > 0` (e.g. 50 coins to unlock chapter).
 
 ##### cURL Request
+
 ```bash
 curl -X POST http://localhost:3000/api/chapters \
   -H "Authorization: Bearer <adminAccessToken>" \
@@ -1774,6 +1869,7 @@ curl -X POST http://localhost:3000/api/chapters \
 ```
 
 ##### JSON Response (`201 Created`)
+
 ```json
 {
   "id": "c0000000-0000-0000-0000-000000000001",
@@ -1795,24 +1891,26 @@ curl -X POST http://localhost:3000/api/chapters \
 ---
 
 #### 31. List Chapters
+
 Retrieves a paginated list of chapters ordered by `sortOrder ASC`. Public users strictly receive `published: true` chapters.
 
 - **Endpoint**: `GET /api/chapters`
 - **Access**: Public / Authenticated
 - **HTTP Status**: `200 OK`
 - **Query Parameters**:
-  - `bookId` *(optional)*: Filter chapters by parent book UUID.
-  - `pricingModel` *(optional)*: `FREE | PARTIAL_FREE | PAID`.
-  - `published` *(optional, Admin only)*: `true | false`.
-  - `search` *(optional)*: Fuzzy search by chapter title.
-  - `page` *(optional, default: 1)*: Page number.
-  - `limit` *(optional, default: 20, max: 100)*: Chapters per page.
-  - `sortBy` *(optional, default: 'sortOrder')*: `chapterNumber | sortOrder | createdAt | title`.
-  - `sortOrder` *(optional, default: 'ASC')*: `ASC | DESC`.
+  - `bookId` _(optional)_: Filter chapters by parent book UUID.
+  - `pricingModel` _(optional)_: `FREE | PARTIAL_FREE | PAID`.
+  - `published` _(optional, Admin only)_: `true | false`.
+  - `search` _(optional)_: Fuzzy search by chapter title.
+  - `page` _(optional, default: 1)_: Page number.
+  - `limit` _(optional, default: 20, max: 100)_: Chapters per page.
+  - `sortBy` _(optional, default: 'sortOrder')_: `chapterNumber | sortOrder | createdAt | title`.
+  - `sortOrder` _(optional, default: 'ASC')_: `ASC | DESC`.
 
 ---
 
 #### 32. Get Chapter by ID
+
 Fetches a single chapter by UUID with joined parent book relation.
 
 - **Endpoint**: `GET /api/chapters/:id`
@@ -1822,6 +1920,7 @@ Fetches a single chapter by UUID with joined parent book relation.
 ---
 
 #### 33. Update Chapter
+
 Updates chapter details, pricing model, coin cost, or publication status (Admin only).
 
 - **Endpoint**: `PATCH /api/chapters/:id`
@@ -1831,6 +1930,7 @@ Updates chapter details, pricing model, coin cost, or publication status (Admin 
 ---
 
 #### 34. Delete Chapter
+
 Soft-deletes a chapter by setting `deleted_at` timestamp and automatically syncs the book's `totalChapters` counter (Admin only).
 
 - **Endpoint**: `DELETE /api/chapters/:id`
@@ -1840,13 +1940,15 @@ Soft-deletes a chapter by setting `deleted_at` timestamp and automatically syncs
 ---
 
 #### 35. Generate Chapter PDF Upload URL
+
 Generates a direct browser-to-S3 presigned `PUT` upload URL for a chapter's PDF file (Admin only).
 
-- **Endpoint**: `POST /api/chapters/:id/content/upload-url` *(also available at `/api/admin/chapters/:id/content/upload-url`)*
+- **Endpoint**: `POST /api/chapters/:id/content/upload-url` _(also available at `/api/admin/chapters/:id/content/upload-url`)_
 - **Access**: Protected (`Roles: ADMIN, SUPER_ADMIN`)
 - **HTTP Status**: `200 OK`
 
 ##### Request Body
+
 ```json
 {
   "fileSize": 15728640,
@@ -1856,6 +1958,7 @@ Generates a direct browser-to-S3 presigned `PUT` upload URL for a chapter's PDF 
 ```
 
 ##### Response (`200 OK`)
+
 ```json
 {
   "uploadUrl": "https://ebook-platform-pdfs-prod.s3.ap-south-1.amazonaws.com/chapters/c0000000.../versions/.../chapter.pdf?...",
@@ -1869,13 +1972,15 @@ Generates a direct browser-to-S3 presigned `PUT` upload URL for a chapter's PDF 
 ---
 
 #### 36. Complete Chapter PDF Upload
+
 Validates the uploaded PDF in S3 (`HeadObject` and PDF magic bytes `%PDF`), verifies file size, updates `contentStatus: "READY"`, and increments book chapter/page counters (Admin only).
 
-- **Endpoint**: `POST /api/chapters/:id/content/complete` *(also available at `/api/admin/chapters/:id/content/complete`)*
+- **Endpoint**: `POST /api/chapters/:id/content/complete` _(also available at `/api/admin/chapters/:id/content/complete`)_
 - **Access**: Protected (`Roles: ADMIN, SUPER_ADMIN`)
 - **HTTP Status**: `200 OK`
 
 ##### Request Body
+
 ```json
 {
   "objectKey": "chapters/c0000000-0000-0000-0000-000000000001/versions/v0000000-0000-0000-0000-000000000001/chapter.pdf",
@@ -1888,6 +1993,7 @@ Validates the uploaded PDF in S3 (`HeadObject` and PDF magic bytes `%PDF`), veri
 ---
 
 #### 37. Get Authorized Chapter Reader Access URL
+
 Generates a short-lived, secure presigned AWS S3 download/streaming URL for the chapter PDF. Validates chapter unlock status, free pricing model, or user coin purchases before granting access.
 
 - **Endpoint**: `GET /api/chapters/:id/access`
@@ -1895,6 +2001,7 @@ Generates a short-lived, secure presigned AWS S3 download/streaming URL for the 
 - **HTTP Status**: `200 OK`
 
 ##### Response (`200 OK`)
+
 ```json
 {
   "chapterId": "c0000000-0000-0000-0000-000000000001",
@@ -1922,7 +2029,6 @@ All raw manga & comic PDFs and high-resolution cover images are securely stored 
 
 ---
 
-
 ---
 
 ## 📧 Transactional Email & Notification System
@@ -1930,6 +2036,7 @@ All raw manga & comic PDFs and high-resolution cover images are securely stored 
 The email subsystem is powered by `Nodemailer` through `MailService` in `src/common/mail/`.
 
 ### Email Features
+
 - **Responsive HTML Templates**: Styled with modern typography, dark-mode styling, prominent OTP code callouts, and expiration notices.
 - **Plain-Text Fallbacks**: Included automatically for email clients that disable HTML rendering.
 - **Security Callouts**: Displays warning notices advising users never to share OTP codes with third parties.
@@ -1962,37 +2069,37 @@ pnpm format
 
 ## 🗺️ Master Project Roadmap & Milestone Tracker (Phases 1–12)
 
-| Phase | Milestone / Domain Area | Status | Key Deliverables |
-| :--- | :--- | :---: | :--- |
-| **Phase 1** | **Foundation & Architecture** | ✅ **DONE** | NestJS 11, PostgreSQL, TypeORM, env configurations, Joi schema validation, migrations & idempotent seeders. |
-| **Phase 2** | **Authentication & Security** | ✅ **DONE** | Dual-token auth (JWT + rotation), bcrypt OTP verification, password reset, RBAC guards, device detection, Swagger docs. |
-| **Phase 3** | **User Management Module** | ⏳ **IN PROGRESS** | User profiles, account settings, theme preferences, avatar uploads, reading activity logs. |
-| **Phase 4** | **Catalog & Content Engine** | ✅ **DONE** | 14 TypeORM entities, isolated PostgreSQL "catalog" schema, dual hierarchy (Series→Volume→Book & Series→Book), composite indexes, and idempotent master reference seeders. |
-| **Phase 5** | **Reading & Library Engine** | 📋 *Planned* | Page delivery API, cloud reading progress sync, bookmarks, favorites, and reading analytics. |
-| **Phase 6** | **Wallet & Virtual Coins** | 📋 *Planned* | Coin wallet balance, pay-per-chapter unlocking, transaction ledger, daily login reward coins. |
-| **Phase 7** | **Payment Gateway Integration** | 📋 *Planned* | Razorpay / Stripe integration, coin bundles, webhooks, invoice generation & purchase history. |
-| **Phase 8** | **Admin CMS & Moderation** | 📋 *Planned* | Admin dashboard APIs, batch chapter upload pipeline, user bans, role management & sales analytics. |
-| **Phase 9** | **Cloud Storage & CDN Delivery** | 📋 *Planned* | AWS S3 / Cloudflare R2 storage, signed image URLs, WebP conversion pipeline, CDN caching. |
-| **Phase 10** | **Production Hardening** | 📋 *Planned* | Redis caching layer, distributed rate limiting, health probes (`@nestjs/terminus`), APM logging. |
-| **Phase 11** | **Automated Testing Suite** | 📋 *Planned* | Comprehensive unit tests, E2E flow tests, database fixtures, load testing with k6. |
-| **Phase 12** | **CI/CD & Deployment** | 📋 *Planned* | GitHub Actions pipeline, multi-stage Dockerfile, staging and zero-downtime production deployment. |
+| Phase        | Milestone / Domain Area          |       Status       | Key Deliverables                                                                                                                                                          |
+| :----------- | :------------------------------- | :----------------: | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Phase 1**  | **Foundation & Architecture**    |    ✅ **DONE**     | NestJS 11, PostgreSQL, TypeORM, env configurations, Joi schema validation, migrations & idempotent seeders.                                                               |
+| **Phase 2**  | **Authentication & Security**    |    ✅ **DONE**     | Dual-token auth (JWT + rotation), bcrypt OTP verification, password reset, RBAC guards, device detection, Swagger docs.                                                   |
+| **Phase 3**  | **User Management Module**       | ⏳ **IN PROGRESS** | User profiles, account settings, theme preferences, avatar uploads, reading activity logs.                                                                                |
+| **Phase 4**  | **Catalog & Content Engine**     |    ✅ **DONE**     | 14 TypeORM entities, isolated PostgreSQL "catalog" schema, dual hierarchy (Series→Volume→Book & Series→Book), composite indexes, and idempotent master reference seeders. |
+| **Phase 5**  | **Reading & Library Engine**     |    📋 _Planned_    | Page delivery API, cloud reading progress sync, bookmarks, favorites, and reading analytics.                                                                              |
+| **Phase 6**  | **Wallet & Virtual Coins**       |    📋 _Planned_    | Coin wallet balance, pay-per-chapter unlocking, transaction ledger, daily login reward coins.                                                                             |
+| **Phase 7**  | **Payment Gateway Integration**  |    📋 _Planned_    | Razorpay / Stripe integration, coin bundles, webhooks, invoice generation & purchase history.                                                                             |
+| **Phase 8**  | **Admin CMS & Moderation**       |    📋 _Planned_    | Admin dashboard APIs, batch chapter upload pipeline, user bans, role management & sales analytics.                                                                        |
+| **Phase 9**  | **Cloud Storage & CDN Delivery** |    📋 _Planned_    | AWS S3 / Cloudflare R2 storage, signed image URLs, WebP conversion pipeline, CDN caching.                                                                                 |
+| **Phase 10** | **Production Hardening**         |    📋 _Planned_    | Redis caching layer, distributed rate limiting, health probes (`@nestjs/terminus`), APM logging.                                                                          |
+| **Phase 11** | **Automated Testing Suite**      |    📋 _Planned_    | Comprehensive unit tests, E2E flow tests, database fixtures, load testing with k6.                                                                                        |
+| **Phase 12** | **CI/CD & Deployment**           |    📋 _Planned_    | GitHub Actions pipeline, multi-stage Dockerfile, staging and zero-downtime production deployment.                                                                         |
 
 ---
 
 ## 📦 Tech Stack Matrix
 
-| Category | Technology | Version | Purpose |
-| :--- | :--- | :--- | :--- |
-| **Framework** | [NestJS](https://nestjs.com/) | `^11.0.1` | Modular backend architecture |
-| **Language** | [TypeScript](https://www.typescriptlang.org/) | `^5.7.3` | Type-safe enterprise JavaScript |
-| **Database** | [PostgreSQL](https://www.postgresql.org/) | `14+` | Relational ACID database |
-| **ORM** | [TypeORM](https://typeorm.io/) | `^1.1.0` | Schema migrations, entities, repositories |
-| **Authentication** | [Passport JWT](http://www.passportjs.org/) | `^0.7.0` | Stateless JWT and Bearer strategy |
-| **Password Hashing** | [bcrypt](https://www.npmjs.com/package/bcrypt) | `^6.0.0` | Password and OTP hashing |
-| **Validation** | [class-validator](https://github.com/typestack/class-validator) & [Joi](https://joi.dev/) | `^0.15.1` / `18.2.3` | Request payload and environment sanitization |
-| **Email Service** | [Nodemailer](https://nodemailer.com/) | `^9.0.4` | SMTP transactional email delivery |
-| **API Documentation** | [Swagger / OpenAPI](https://swagger.io/) | `^11.4.6` | Interactive API documentation (`/docs`) |
-| **Package Manager** | [pnpm](https://pnpm.io/) | `^9.x` | Fast, disk-efficient package management |
+| Category              | Technology                                                                                | Version              | Purpose                                      |
+| :-------------------- | :---------------------------------------------------------------------------------------- | :------------------- | :------------------------------------------- |
+| **Framework**         | [NestJS](https://nestjs.com/)                                                             | `^11.0.1`            | Modular backend architecture                 |
+| **Language**          | [TypeScript](https://www.typescriptlang.org/)                                             | `^5.7.3`             | Type-safe enterprise JavaScript              |
+| **Database**          | [PostgreSQL](https://www.postgresql.org/)                                                 | `14+`                | Relational ACID database                     |
+| **ORM**               | [TypeORM](https://typeorm.io/)                                                            | `^1.1.0`             | Schema migrations, entities, repositories    |
+| **Authentication**    | [Passport JWT](http://www.passportjs.org/)                                                | `^0.7.0`             | Stateless JWT and Bearer strategy            |
+| **Password Hashing**  | [bcrypt](https://www.npmjs.com/package/bcrypt)                                            | `^6.0.0`             | Password and OTP hashing                     |
+| **Validation**        | [class-validator](https://github.com/typestack/class-validator) & [Joi](https://joi.dev/) | `^0.15.1` / `18.2.3` | Request payload and environment sanitization |
+| **Email Service**     | [Nodemailer](https://nodemailer.com/)                                                     | `^9.0.4`             | SMTP transactional email delivery            |
+| **API Documentation** | [Swagger / OpenAPI](https://swagger.io/)                                                  | `^11.4.6`            | Interactive API documentation (`/docs`)      |
+| **Package Manager**   | [pnpm](https://pnpm.io/)                                                                  | `^9.x`               | Fast, disk-efficient package management      |
 
 ---
 
