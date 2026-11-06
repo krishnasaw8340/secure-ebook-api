@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ChaptersController } from './chapters.controller';
 import { ChaptersService } from '../services/chapters.service';
+import { ChapterUnlockService } from '../services/chapter-unlock.service';
 import { ChapterPricingModel } from '../../common/enums/chapter-pricing-model.enum';
 import { ChapterContentStatus } from '../../common/enums/chapter-content-status.enum';
 
@@ -61,6 +62,7 @@ describe('ChaptersController', () => {
           provide: ChaptersService,
           useValue: service,
         },
+        { provide: ChapterUnlockService, useValue: {} },
       ],
     }).compile();
 

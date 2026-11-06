@@ -8,6 +8,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { Chapter } from '../entities/chapter.entity';
 import { Book } from '../entities/book.entity';
+import { ChapterUnlockService } from './chapter-unlock.service';
 import { ChapterPricingModel } from '../../common/enums/chapter-pricing-model.enum';
 import { ChapterContentStatus } from '../../common/enums/chapter-content-status.enum';
 import { RoleType } from '../../common/enums/role.enum';
@@ -36,6 +37,7 @@ export class ChaptersService {
     @InjectRepository(Book)
     private readonly bookRepository: Repository<Book>,
     private readonly storageService: StorageService,
+    private readonly chapterUnlockService: ChapterUnlockService,
   ) {}
 
   private isAdminUser(user?: JwtUser): boolean {
@@ -556,7 +558,11 @@ export class ChaptersService {
     try {
       s3Head = await this.storageService.headObject(objectKey);
     } catch (error: unknown) {
-      const s3Error = error as { name?: string; message?: string; $metadata?: { httpStatusCode?: number } };
+      const s3Error = error as {
+        name?: string;
+        message?: string;
+        $metadata?: { httpStatusCode?: number };
+      };
       if (
         s3Error?.name === 'NotFound' ||
         s3Error?.name === 'NoSuchKey' ||
@@ -642,12 +648,8 @@ export class ChaptersService {
       throw new NotFoundException('Chapter PDF content is not available');
     }
 
-    // Entitlement checking extension point:
-    // Free chapters are accessible to all authenticated users.
-    // Paid chapters are accessible to Admins; for regular users, entitlement verification (ChapterUnlock / Wallet) will be enforced here.
-    if (chapter.pricingModel === ChapterPricingModel.PAID && !isAdmin) {
-      // Future extension: verify ChapterUnlock record or throw ForbiddenException
-    }
+    // Paid chapters require an unlock (coins spent) unless the user is an admin.
+    await this.chapterUnlockService.assertEntitled(chapter, user);
 
     const expiresInSeconds = 600; // 10 minutes
     const pdfUrl = await this.storageService.generatePresignedDownloadUrl(

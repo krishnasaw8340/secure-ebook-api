@@ -1,18 +1,13 @@
-import { Test, TestingModule } from '@nestjs/testing';
+import { UnauthorizedException } from '@nestjs/common';
 import { PaymentController } from './payment.controller';
+import { PaymentService } from './payment.service';
 
 describe('PaymentController', () => {
-  let controller: PaymentController;
+  const controller = new PaymentController({} as PaymentService);
 
-  beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      controllers: [PaymentController],
-    }).compile();
-
-    controller = module.get<PaymentController>(PaymentController);
-  });
-
-  it('should be defined', () => {
-    expect(controller).toBeDefined();
+  it('rejects order creation without an authenticated user', () => {
+    expect(() => controller.createOrder({ packageId: 'x' })).toThrow(
+      UnauthorizedException,
+    );
   });
 });

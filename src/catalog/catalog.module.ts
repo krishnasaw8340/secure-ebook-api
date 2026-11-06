@@ -28,10 +28,13 @@ import {
   MediaAsset,
 } from './entities';
 import { StorageModule } from '../storage/storage.module';
+import { WalletModule } from '../wallet/wallet.module';
+import { ChapterUnlockService } from './services/chapter-unlock.service';
 
 @Module({
   imports: [
     StorageModule,
+    WalletModule,
     TypeOrmModule.forFeature([
       BookSeries,
       Volume,
@@ -63,6 +66,7 @@ import { StorageModule } from '../storage/storage.module';
     VolumesService,
     BooksService,
     ChaptersService,
+    ChapterUnlockService,
   ],
   exports: [
     TypeOrmModule,
@@ -71,6 +75,7 @@ import { StorageModule } from '../storage/storage.module';
     VolumesService,
     BooksService,
     ChaptersService,
+    ChapterUnlockService,
   ],
 })
 export class CatalogModule {}

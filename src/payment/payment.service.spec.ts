@@ -1,18 +1,17 @@
-import { Test, TestingModule } from '@nestjs/testing';
+import { ServiceUnavailableException } from '@nestjs/common';
 import { PaymentService } from './payment.service';
+import { PaymentProviderRegistry } from './providers/payment-provider.registry';
 
 describe('PaymentService', () => {
-  let service: PaymentService;
-
-  beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [PaymentService],
-    }).compile();
-
-    service = module.get<PaymentService>(PaymentService);
-  });
-
-  it('should be defined', () => {
-    expect(service).toBeDefined();
+  it('returns 503 when no provider adapter is registered', async () => {
+    const registry = {
+      getActive: () => undefined,
+    } as unknown as PaymentProviderRegistry;
+    const service = new PaymentService({} as never, {} as never, registry, {
+      get: jest.fn(),
+    } as never);
+    await expect(service.createOrder('u1', 'p1')).rejects.toBeInstanceOf(
+      ServiceUnavailableException,
+    );
   });
 });

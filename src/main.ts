@@ -5,7 +5,8 @@ import { ValidationPipe } from '@nestjs/common';
 import cookieParser from 'cookie-parser';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  // rawBody: webhook signatures must be verified over the exact bytes received
+  const app = await NestFactory.create(AppModule, { rawBody: true });
 
   // Parse cookies (required for HttpOnly refresh_token cookie)
   app.use(cookieParser());

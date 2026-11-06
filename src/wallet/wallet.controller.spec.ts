@@ -1,18 +1,11 @@
-import { Test, TestingModule } from '@nestjs/testing';
+import { UnauthorizedException } from '@nestjs/common';
 import { WalletController } from './wallet.controller';
+import { WalletService } from './wallet.service';
 
 describe('WalletController', () => {
-  let controller: WalletController;
+  const controller = new WalletController({} as WalletService);
 
-  beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      controllers: [WalletController],
-    }).compile();
-
-    controller = module.get<WalletController>(WalletController);
-  });
-
-  it('should be defined', () => {
-    expect(controller).toBeDefined();
+  it('rejects wallet reads without an authenticated user', () => {
+    expect(() => controller.getWallet()).toThrow(UnauthorizedException);
   });
 });

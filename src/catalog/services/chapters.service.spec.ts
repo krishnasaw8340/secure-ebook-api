@@ -6,6 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ChaptersService } from './chapters.service';
+import { ChapterUnlockService } from './chapter-unlock.service';
 import { Chapter } from '../entities/chapter.entity';
 import { Book } from '../entities/book.entity';
 import { ChapterPricingModel } from '../../common/enums/chapter-pricing-model.enum';
@@ -94,6 +95,10 @@ describe('ChaptersService', () => {
         {
           provide: StorageService,
           useValue: storageService,
+        },
+        {
+          provide: ChapterUnlockService,
+          useValue: { assertEntitled: jest.fn().mockResolvedValue(undefined) },
         },
       ],
     }).compile();

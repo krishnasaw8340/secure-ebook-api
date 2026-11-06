@@ -28,7 +28,12 @@ const validationSchema = Joi.object({
   MAIL_SECURE: Joi.boolean().optional(),
   MAIL_FROM: Joi.string().optional(),
 
-  // Payment (optional until implemented)
+  // Payment (provider adapters are plugged in separately)
+  PAYMENT_PROVIDER: Joi.string().optional(),
+  PAYMENT_ORDER_TTL_MINUTES: Joi.number().min(1).default(20),
+  PAYMENT_MAX_PENDING_ORDERS: Joi.number().min(1).default(5),
+  PAYMENT_RETURN_URL: Joi.string().uri().optional(),
+  WELCOME_BONUS_COINS: Joi.number().integer().min(0).default(200),
   RAZORPAY_KEY: Joi.string().optional(),
   RAZORPAY_SECRET: Joi.string().optional(),
 

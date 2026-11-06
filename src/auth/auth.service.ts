@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -11,6 +12,7 @@ import { TokenService } from './services/token.service';
 import { RefreshTokenService } from './services/refresh-token.service';
 import { OtpService } from './services/otp.service';
 import { MailService } from '../common/mail/mail.service';
+import { WalletService } from '../wallet/wallet.service';
 import { LoginDto, RegisterDto } from './dto/register.dto';
 import { AuthResponseDto } from './dto/auth-response.dto';
 import { JwtPayload } from './interfaces/jwt-payload.interface';
@@ -20,6 +22,8 @@ import { DeviceMetadata } from './interfaces/device-metadata.interface';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly usersService: UsersService,
     private readonly passwordService: PasswordService,
@@ -27,6 +31,7 @@ export class AuthService {
     private readonly refreshTokenService: RefreshTokenService,
     private readonly otpService: OtpService,
     private readonly mailService: MailService,
+    private readonly walletService: WalletService,
   ) {}
 
   async register(
@@ -148,6 +153,13 @@ export class AuthService {
     );
     if (!isPasswordValid) {
       throw new UnauthorizedException('Invalid password');
+    }
+
+    // Step 3b: One-time welcome coins (idempotent; never blocks login)
+    try {
+      await this.walletService.grantWelcomeBonus(user.id);
+    } catch (err) {
+      this.logger.error(`Welcome bonus failed for user ${user.id}`, err);
     }
 
     // Step 4: Build JWT Payloads

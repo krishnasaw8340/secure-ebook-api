@@ -1,18 +1,25 @@
-import { Test, TestingModule } from '@nestjs/testing';
 import { WalletService } from './wallet.service';
+import { CoinTransactionType } from './entities/coin-transaction.entity';
 
-describe('WalletService', () => {
-  let service: WalletService;
+describe('WalletService.creditWithManager', () => {
+  const service = new WalletService(
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+  );
 
-  beforeEach(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      providers: [WalletService],
-    }).compile();
-
-    service = module.get<WalletService>(WalletService);
-  });
-
-  it('should be defined', () => {
-    expect(service).toBeDefined();
+  it('rejects non-positive or fractional amounts', async () => {
+    for (const amount of [0, -5, 1.5]) {
+      await expect(
+        service.creditWithManager({} as never, {
+          userId: 'u',
+          amount,
+          type: CoinTransactionType.RECHARGE,
+          idempotencyKey: 'k',
+        }),
+      ).rejects.toThrow('positive integer');
+    }
   });
 });

@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AuthService } from './auth.service';
+import { WalletService } from '../wallet/wallet.service';
 import { UsersService } from '../user/services/users.service';
 import { PasswordService } from './services/password.service';
 import { TokenService } from './services/token.service';
@@ -20,6 +21,7 @@ describe('AuthService', () => {
         { provide: RefreshTokenService, useValue: {} },
         { provide: OtpService, useValue: {} },
         { provide: MailService, useValue: {} },
+        { provide: WalletService, useValue: {} },
       ],
     }).compile();
 

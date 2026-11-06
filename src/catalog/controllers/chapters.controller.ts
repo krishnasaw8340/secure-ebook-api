@@ -6,9 +6,11 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  ParseUUIDPipe,
   Patch,
   Post,
   Query,
+  UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -19,6 +21,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { ChaptersService } from '../services/chapters.service';
+import { ChapterUnlockService } from '../services/chapter-unlock.service';
 import { Roles } from '../../auth/decorators/roles.decorator';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { Public } from '../../auth/decorators/public.decorator';
@@ -42,7 +45,10 @@ import {
 @ApiTags('Chapters')
 @Controller('chapters')
 export class ChaptersController {
-  constructor(private readonly chaptersService: ChaptersService) {}
+  constructor(
+    private readonly chaptersService: ChaptersService,
+    private readonly chapterUnlockService: ChapterUnlockService,
+  ) {}
 
   @Post()
   @Roles(RoleType.ADMIN, RoleType.SUPER_ADMIN)
@@ -82,6 +88,29 @@ export class ChaptersController {
   })
   findAll(@Query() query: QueryChapterDto, @CurrentUser() user?: JwtUser) {
     return this.chaptersService.findAll(query, user);
+  }
+
+  @Get('unlocks/me')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'List chapters unlocked by the current user' })
+  listMyUnlocks(@CurrentUser() user?: JwtUser) {
+    if (!user?.userId) throw new UnauthorizedException();
+    return this.chapterUnlockService.listUnlocks(user.userId);
+  }
+
+  @Post(':id/unlock')
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary:
+      'Spend coins to unlock a paid chapter (idempotent; 402 if balance is too low)',
+  })
+  @ApiParam({ name: 'id', description: 'Chapter UUID' })
+  unlockChapter(
+    @Param('id', ParseUUIDPipe) id: string,
+    @CurrentUser() user?: JwtUser,
+  ) {
+    if (!user?.userId) throw new UnauthorizedException();
+    return this.chapterUnlockService.unlock(user.userId, id, user);
   }
 
   @Get(':id')

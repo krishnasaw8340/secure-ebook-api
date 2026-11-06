@@ -18,6 +18,7 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RolesGuard } from './guards/roles.guard';
 import { UserModule } from '../user/user.module';
 import { MailModule } from '../common/mail/mail.module';
+import { WalletModule } from '../wallet/wallet.module';
 
 @Module({
   imports: [
@@ -32,6 +33,7 @@ import { MailModule } from '../common/mail/mail.module';
     JwtModule.register({}),
     UserModule,
     MailModule,
+    WalletModule,
   ],
   providers: [
     AuthService,
