@@ -140,10 +140,16 @@ export class PaymentService {
     );
   }
 
-  async redeemOrderCode(rawCode: string): Promise<PaymentOrderView> {
+  async redeemOrderCode(
+    rawCode: string,
+    discordUserId?: string,
+  ): Promise<PaymentOrderView> {
     const orderCode = rawCode.trim().toUpperCase();
     if (!/^KY-[0-9A-F]{12}$/.test(orderCode)) {
       throw new NotFoundException('Payment order code not found');
+    }
+    if (discordUserId && !/^\d{17,20}$/.test(discordUserId)) {
+      throw new BadRequestException('Invalid Discord user ID.');
     }
     const provider = this.registry.get('paypal');
     if (!provider || !this.isCaptureProvider(provider)) {
@@ -190,6 +196,7 @@ export class PaymentService {
         order.providerOrderId = session.providerOrderId;
         order.checkoutUrl = session.checkoutUrl;
         order.codeRedeemedAt = new Date();
+        order.discordUserId = discordUserId ?? null;
         await manager.save(PaymentOrder, order);
         return { order };
       } catch (error) {

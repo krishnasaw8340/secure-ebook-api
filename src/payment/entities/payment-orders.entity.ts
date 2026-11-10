@@ -38,6 +38,14 @@ export class PaymentOrder {
   orderCode: string | null;
 
   @Column({
+    name: 'discord_user_id',
+    type: 'varchar',
+    length: 20,
+    nullable: true,
+  })
+  discordUserId: string | null;
+
+  @Column({
     name: 'code_redeemed_at',
     type: 'timestamptz',
     nullable: true,

@@ -19,6 +19,8 @@ import { DiscordPaymentService } from '../services/discord-payment.service';
 interface DiscordInteraction {
   type?: number;
   token?: string;
+  user?: { id: string };
+  member?: { user?: { id: string } };
   data?: {
     custom_id?: string;
     components?: {
@@ -62,17 +64,20 @@ export class DiscordInteractionController {
       const code = interaction.data.components
         ?.flatMap((row) => row.components ?? [])
         .find((component) => component.custom_id === 'order_code')?.value;
-      if (!code) {
+      const discordUserId =
+        interaction.user?.id ?? interaction.member?.user?.id;
+      if (!code || !discordUserId) {
         return {
           type: 4,
           data: {
             flags: 64,
-            content: 'Enter the order code from your wallet.',
+            content:
+              'Could not read your order code or Discord account. Please try again.',
           },
         };
       }
 
-      void this.finishCodeRedemption(code, interaction.token);
+      void this.finishCodeRedemption(code, discordUserId, interaction.token);
       return { type: 5, data: { flags: 64 } };
     }
 
@@ -111,10 +116,14 @@ export class DiscordInteractionController {
 
   private async finishCodeRedemption(
     rawCode: string,
+    discordUserId: string,
     interactionToken: string,
   ): Promise<void> {
     try {
-      const order = await this.paymentService.redeemOrderCode(rawCode);
+      const order = await this.paymentService.redeemOrderCode(
+        rawCode,
+        discordUserId,
+      );
       if (!order.checkoutUrl) {
         throw new Error('PayPal checkout URL was not created');
       }
