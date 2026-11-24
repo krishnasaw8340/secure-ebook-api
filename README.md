@@ -1,312 +1,111 @@
-# 📚 Kuroyomi Secure Ebook & Manga API
+# Secure Ebook API
 
-> **An enterprise-grade, high-performance, and secure backend REST API for digital manga, comic, and ebook platforms built with [NestJS 11](https://nestjs.com/), [TypeORM](https://typeorm.io/), and [PostgreSQL](https://www.postgresql.org/).**
+A secure, modular NestJS backend for a digital reading platform focused on ebooks, manga, and comics. The project is designed for multi-role access, secure authentication, catalog management, digital chapter delivery, wallet-based unlocks, and payment workflows.
 
----
+This API powers the backend for a reading platform and exposes a clear REST interface with OpenAPI documentation via Swagger.
 
-## 📑 Table of Contents
+## Overview
 
-1. [🌟 Executive Overview](#-executive-overview)
-2. [🏗️ Architecture & Design Philosophy](#️-architecture--design-philosophy)
-   - [Modular Monolith Architecture](#modular-monolith-architecture)
-   - [Directory Structure & Codebase Anatomy](#directory-structure--codebase-anatomy)
-3. [🔐 Deep-Dive Security & Authentication Engine](#-deep-dive-security--authentication-engine)
-   - [Dual-Token Rotation Lifecycle](#dual-token-rotation-lifecycle)
-   - [Authentication Sequence Flow](#authentication-sequence-flow)
-   - [Token Comparison Matrix](#token-comparison-matrix)
-   - [Security & Defense Mechanisms](#security--defense-mechanisms)
-   - [Device Intelligence & Fingerprinting](#device-intelligence--fingerprinting)
-   - [Role-Based Access Control (RBAC)](#role-based-access-control-rbac)
-4. [🗄️ Database Architecture, Migrations & Seeding](#️-database-architecture-migrations--seeding)
-   - [Database Schema & ER Diagram](#database-schema--er-diagram)
-   - [Data Dictionary & Table Reference](#data-dictionary--table-reference)
-   - [TypeORM Migration Management](#typeorm-migration-management)
-   - [Idempotent Seeder System](#idempotent-seeder-system)
-   - [Troubleshooting Database Sync](#troubleshooting-database-sync)
-5. [🚀 Getting Started: Developer Documentary Walkthrough](#-getting-started-developer-documentary-walkthrough)
-   - [Prerequisites](#prerequisites)
-   - [Step 1: Installation](#step-1-installation)
-   - [Step 2: Environment Configuration](#step-2-environment-configuration)
-   - [Step 3: Database Provisioning](#step-3-database-provisioning)
-   - [Step 4: Executing Migrations & Seeds](#step-4-executing-migrations--seeds)
-   - [Step 5: Launching the Application](#step-5-launching-the-application)
-   - [Step 6: Interactive Swagger API Explorer](#step-6-interactive-swagger-api-explorer)
-6. [📡 Complete API Reference & Developer Cookbook](#-complete-api-reference--developer-cookbook)
-   - [6.1 Authentication & Security Endpoints](#61-authentication--security-endpoints)
-   - [6.2 User Profile Management](#62-user-profile-management)
-   - [6.3 Series Catalog Management](#63-series-catalog-management)
-   - [6.4 Volume Catalog Management](#64-volume-catalog-management)
-   - [6.5 Book Catalog Management & S3 Covers](#65-book-catalog-management)
-   - [6.6 Chapter Catalog Management & S3 PDF Streaming](#66-chapter-catalog-management--s3-pdf-streaming)
-7. [☁️ AWS S3 Storage & Secure Media Architecture](#️-aws-s3-storage--secure-media-architecture)
-8. [📧 Transactional Email & Notification System](#-transactional-email--notification-system)
-9. [🧪 Testing & Code Quality Assurance](#-testing--code-quality-assurance)
-10. [🗺️ Master Project Roadmap & Milestone Tracker (Phases 1–12)](#️-master-project-roadmap--milestone-tracker-phases-112)
-11. [📦 Tech Stack Matrix](#-tech-stack-matrix)
+The application is built around a modular monolith architecture. It separates concerns into domain-focused modules while keeping the system easy to run, test, and extend.
 
----
+Core capabilities include:
 
-## 🌟 Executive Overview
+- Secure user authentication and authorization
+- Email OTP verification and password recovery
+- JWT access tokens plus rotating refresh tokens
+- Role-based access control for admin and user flows
+- Catalog management for series, volumes, books, and chapters
+- Secure storage integration for book covers and chapter PDFs
+- Wallet and coin-based purchases
+- PayPal and Discord-driven payment journeys
+- Reading library and progress tracking
+- Swagger-powered API documentation
 
-The **Kuroyomi Secure Ebook API** provides a resilient, strictly typed, and security-hardened backend foundation tailored for reading platforms that host digital manga, comics, light novels, and ebooks.
+## Tech Stack
 
-### Key Architectural Highlights
+- NestJS 11
+- TypeScript
+- TypeORM
+- PostgreSQL
+- Passport + JWT
+- AWS S3 SDK
+- Nodemailer
+- Swagger / OpenAPI
+- Helmet, compression, cookie-parser
+- Jest for tests
 
-- **Dual-Token Rotation Auth**: 15-minute stateless JWT access tokens combined with 30-day single-use, SHA-256 hashed refresh tokens that rotate on every single refresh call.
-- **Cryptographic OTP Verification**: 6-digit secure OTPs hashed with bcrypt, enforce 10-minute expirations, and strict 5-attempt rate-limiting against brute force attacks.
-- **Zero-Trust Session Management**: Instant revocation of individual sessions (`/logout`) or global session teardown (`/logout-all` and password resets).
-- **Device & Client Intelligence**: Automatic parsing of User-Agent strings and network headers to record human-readable client OS, browser, and IP addresses per session.
-- **Schema-Isolated Database Architecture**: Uses dedicated PostgreSQL schema namespacing (`auth.*`) with explicit TypeORM migrations and idempotent bootstrap seeders.
-- **Strict Validation & Environment Sanitization**: Request bodies sanitized with `class-validator` + `class-transformer` using `whitelist: true`, backed by `Joi` schema-validated environment variables.
-- **Swagger / OpenAPI Documentation**: Auto-generated interactive API docs with built-in JWT Bearer authentication support at `/docs`.
+## Architecture
 
----
+The API is organized into the following modules:
 
-## 🏗️ Architecture & Design Philosophy
+- auth: registration, login, OTP verification, refresh, logout, JWT auth
+- user: profile updates and account-focused actions
+- catalog: series, volumes, books, genres, categories, chapters, media assets
+- reading: reading progress, library, user chapter access records
+- wallet: coin balance, transaction records, package definitions
+- payment: PayPal/Discord order flows and webhook settlement
+- storage: S3 file validation and secure media URLs
+- common: reusable enums, base entities, and mail templates
+- database: TypeORM config, migrations, and seeds
+- config: environment and service configuration
 
-### Modular Monolith Architecture
+Typical request flow:
 
-The codebase adheres to NestJS modular design patterns, maintaining strict encapsulation of domain concerns while sharing reusable cross-cutting components:
+1. Client authenticates via /api/auth/login
+2. Server issues JWT access token and set secure refresh token cookie
+3. Protected routes validate JWT via global guard
+4. Admin routes enforce RBAC with roles guard
+5. Catalog and media operations are isolated by module/service layer
+6. Chapter access and wallet transactions are persisted in PostgreSQL
+7. Media files are stored and served through AWS S3
 
-```mermaid
-graph TD
-    AppModule --> ConfigModule
-    AppModule --> DatabaseModule
-    AppModule --> CommonModule
-    AppModule --> StorageModule
-    AppModule --> AuthModule
-    AppModule --> UserModule
-    AppModule --> CatalogModule
-    AppModule --> ReadingModule
-    AppModule --> WalletModule
-    AppModule --> PaymentModule
-
-    AuthModule --> UserModule
-    AuthModule --> CommonModule
-    CatalogModule --> StorageModule
-    CommonModule --> MailService
-    DatabaseModule --> TypeOrmModule
-```
-
-| Module               | Purpose & Scope                                                                                                       |
-| :------------------- | :-------------------------------------------------------------------------------------------------------------------- |
-| **`AuthModule`**     | Manages registration, OTPs, bcrypt hashing, JWT issuance, refresh token rotation, password recovery, and auth guards. |
-| **`UserModule`**     | Manages user accounts, profile queries, role assignment, and user status lifecycles.                                  |
-| **`CatalogModule`**  | Domain entities for manga/ebook series, volumes, books, and chapters with PDF content.                                |
-| **`StorageModule`**  | AWS S3 presigned PUT URL generation, HeadObject verification, magic-byte detection, and presigned GET streaming URLs. |
-| **`ReadingModule`**  | Handles user libraries, reading progress sync, bookmarks, and chapter access logs.                                    |
-| **`WalletModule`**   | Manages virtual coin balances, packages, unlocking fees, and transaction ledgers.                                     |
-| **`PaymentModule`**  | Discord one-time order-code flow, PayPal checkout/capture, verified webhooks, and atomic wallet settlement.           |
-| **`CommonModule`**   | Global mailer services (`Nodemailer`), base entities, enums, and responsive HTML email templates.                     |
-| **`DatabaseModule`** | TypeORM connection pooling, automatic migration executor, and startup data seeders.                                   |
-
-### Discord + PayPal Coin Checkout
-
-The wallet creates a pending order and displays its one-time `KY-` code (12 random hexadecimal characters). The API ensures a reusable **Enter Order Code** button exists in the configured Discord payment channel. The Discord interaction opens a code-entry modal and responds privately with a PayPal checkout link. The website polls the authenticated order status; the wallet balance is refreshed only after the backend confirms settlement.
-
-Coin packages are configured in the database by migrations:
-
-| Coins |    USD |
-| ----: | -----: |
-|   500 |  $4.99 |
-| 1,200 |  $9.99 |
-| 3,500 | $24.99 |
-| 8,000 | $49.99 |
-
-For sandbox testing, configure the PayPal sandbox app credentials and a webhook subscribed to `PAYMENT.CAPTURE.COMPLETED` and `PAYMENT.CAPTURE.DENIED`, with its delivery URL set to `https://<api-host>/api/payment/webhook/paypal`. Use the webhook ID shown by PayPal, not the webhook URL. Production must use PayPal live credentials and `https://api-m.paypal.com`.
-
-Configure these backend environment variables; never commit their secret values:
-
-- `PAYMENT_PROVIDER=paypal`
-- `PAYMENT_PUBLIC_API_URL` — public API origin, with no `/api` suffix
-- `PAYMENT_RETURN_URL` — frontend wallet URL to return to after PayPal checkout
-- `PAYPAL_BASE_URL`, `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `PAYPAL_WEBHOOK_ID`
-- `DISCORD_BOT_TOKEN`, `DISCORD_APPLICATION_ID`, `DISCORD_APPLICATION_PUBLIC_KEY`
-- `DISCORD_SERVER_ID`, `DISCORD_PAYMENT_CHANNEL_ID`
-
-In the Discord Developer Portal, set the Interactions Endpoint URL to `https://<api-host>/api/payment/discord/interactions`. Invite the bot with permission to view the payment channel, read its message history, and send messages. The API posts or updates the reusable order-code button when the first wallet order is created. After setting environment variables, apply database changes from `secure-ebook-api` with `pnpm migration:run`.
-
-PayPal approval is captured server-side on its return callback; the signed PayPal webhook is also verified and settled idempotently. Both paths use the same PostgreSQL transaction, so an order is never credited twice.
-
----
-
-### Directory Structure & Codebase Anatomy
+## Project Structure
 
 ```text
 secure-ebook-api/
-├── .env.development              # Environment config for local development
-├── .env.staging                  # Staging server configuration
-├── .env.production               # Production deployment configuration
-├── .env.example                  # Template configuration with descriptions
-├── nest-cli.json                 # NestJS CLI build & compilation settings
-├── package.json                  # Dependencies, scripts, and package metadata
-├── tsconfig.json                 # TypeScript compiler configuration
-├── src/
-│   ├── main.ts                   # Application bootstrap entrypoint, Swagger, CORS, pipes
-│   ├── app.module.ts             # Root module aggregating all domain and core modules
-│   ├── app.controller.ts         # Base health & status controller
-│   ├── app.service.ts            # Base service
-│   │
-│   ├── auth/                     # 🔐 Authentication Subsystem
-│   │   ├── auth.module.ts        # Module configuration & dependency wiring
-│   │   ├── auth.controller.ts    # REST controller (10 endpoints: register, login, OTP, tokens, etc.)
-│   │   ├── auth.service.ts       # Orchestrator for registration, verification, token rotation
-│   │   ├── decorators/           # Parameter & method decorators
-│   │   │   ├── current-user.decorator.ts # Extracts authenticated JwtUser from request
-│   │   │   ├── device-info.decorator.ts  # Extracts and parses client User-Agent & IP
-│   │   │   ├── public.decorator.ts       # Bypasses global JWT Auth Guard
-│   │   │   └── roles.decorator.ts        # Attaches required RBAC roles to route
-│   │   ├── dto/                  # Data Transfer Objects with class-validator annotations
-│   │   │   ├── auth-response.dto.ts
-│   │   │   ├── forgot-password.dto.ts
-│   │   │   ├── refresh-token.dto.ts
-│   │   │   ├── register.dto.ts
-│   │   │   ├── resend-otp.dto.ts
-│   │   │   ├── resend-verification.dto.ts
-│   │   │   ├── reset-password.dto.ts
-│   │   │   └── verify-email.dto.ts
-│   │   ├── entities/             # TypeORM PostgreSQL entities for auth schema
-│   │   │   ├── otp-verification.entity.ts
-│   │   │   ├── refresh-token.entity.ts
-│   │   │   ├── role.entity.ts
-│   │   │   ├── user.entity.ts
-│   │   │   └── user-role.entity.ts
-│   │   ├── guards/               # Route guards
-│   │   │   ├── jwt-auth.guard.ts # Global guard verifying Bearer JWT signature
-│   │   │   └── roles.guard.ts    # RBAC guard checking required RoleType against user roles
-│   │   ├── interfaces/           # TypeScript contracts
-│   │   │   ├── device-metadata.interface.ts
-│   │   │   ├── jwt-payload.interface.ts
-│   │   │   └── jwt-user.interface.ts
-│   │   ├── services/             # Specialized business services
-│   │   │   ├── otp.service.ts           # Cryptographic OTP generator, bcrypt hasher & limiter
-│   │   │   ├── password.service.ts      # Bcrypt password hashing & comparator
-│   │   │   ├── refresh-token.service.ts # SHA-256 token hashing, lookup & session revocation
-│   │   │   └── token.service.ts         # JWT access & refresh token signer & verifier
-│   │   └── strategies/
-│   │       └── jwt.strategy.ts   # Passport JWT strategy verifying stateless tokens
-│   │
-│   ├── user/                     # 👤 User Subsystem
-│   │   ├── user.module.ts
-│   │   ├── controllers/
-│   │   │   └── user.controller.ts
-│   │   └── services/
-│   │       └── users.service.ts  # User repository operations, role linking, password updates
-│   │
-│   ├── catalog/                  # 📚 Catalog & Content Subsystem
-│   │   ├── catalog.module.ts
-│   │   ├── catalog.controller.ts
-│   │   ├── catalog.service.ts
-│   │   └── entities/             # 14 Domain Entities (Schema: "catalog")
-│   │       ├── artist.entity.ts
-│   │       ├── author.entity.ts
-│   │       ├── book-genre.entity.ts
-│   │       ├── book-series.entity.ts
-│   │       ├── book-tag.entity.ts
-│   │       ├── book.entity.ts
-│   │       ├── category.entity.ts
-│   │       ├── chapter.entity.ts
-│   │       ├── genre.entity.ts
-│   │       ├── index.ts          # Central barrel exporter
-│   │       ├── language.entity.ts
-│   │       ├── media-asset.entity.ts
-│   │       ├── page.entity.ts
-│   │       ├── tag.entity.ts
-│   │       └── volume.entity.ts
-│   │
-│   ├── reading/                  # 📖 Reading Progress & Library Subsystem
-│   │   ├── reading.module.ts
-│   │   ├── reading.controller.ts
-│   │   ├── reading.service.ts
-│   │   └── entities/
-│   │       ├── reading_progress.entity.ts
-│   │       └── user_library.entity.ts
-│   │
-│   ├── wallet/                   # 🪙 Coin & Wallet Subsystem
-│   │   ├── wallet.module.ts
-│   │   ├── wallet.controller.ts
-│   │   ├── wallet.service.ts
-│   │   └── entities/
-│   │       ├── coin-package.entity.ts
-│   │       ├── coin-transaction.entity.ts
-│   │       └── wallet.entity.ts
-│   │
-│   ├── payment/                  # 💳 Payment Gateway Subsystem
-│   │   ├── payment.module.ts
-│   │   ├── payment.controller.ts
-│   │   ├── payment.service.ts
-│   │   └── entities/
-│   │       ├── payment-orders.entity.ts
-│   │       └── payment-transaction.entity.ts
-│   │
-│   ├── common/                   # 🧩 Shared Common Utilities & Mail
-│   │   ├── common.module.ts
-│   │   ├── entities/
-│   │   │   └── base.entity.ts    # UUID Primary key, created_at, updated_at timestamps
-│   │   ├── enums/
-│   │   │   ├── book-pricing-model.enum.ts    # FREE | PER_PAGE | PER_CHAPTER | PER_BOOK | SUBSCRIPTION
-│   │   │   ├── book-status.enum.ts           # DRAFT | PUBLISHED | UNPUBLISHED | ARCHIVED
-│   │   │   ├── chapter-pricing-model.enum.ts # FREE | PARTIAL_FREE | PAID
-│   │   │   ├── media-asset-type.enum.ts      # COVER | BANNER | THUMBNAIL | PROMOTION
-│   │   │   ├── otp-purpose.enum.ts           # REGISTER | LOGIN | FORGOT_PASSWORD
-│   │   │   ├── role.enum.ts                  # SUPER_ADMIN | ADMIN | USER
-│   │   │   ├── series-status.enum.ts         # DRAFT | ONGOING | COMPLETED | HIATUS | PUBLISHED | ARCHIVED
-│   │   │   ├── user-status.enum.ts           # ACTIVE | INACTIVE | SUSPENDED
-│   │   │   └── volume-status.enum.ts         # DRAFT | PUBLISHED | ARCHIVED
-│   │   └── mail/
-│   │       ├── mail.module.ts
-│   │       ├── mail.service.ts   # Nodemailer SMTP dispatcher
-│   │       └── templates/        # Responsive HTML email templates
-│   │           ├── base.template.ts
-│   │           ├── index.ts
-│   │           ├── password-reset-otp.template.ts
-│   │           └── verification-otp.template.ts
-│   │
-│   ├── config/                   # ⚙️ Type-Safe Configuration Loaders & Joi Validation
-│   │   ├── app.config.ts
-│   │   ├── database.config.ts
-│   │   ├── index.ts
-│   │   ├── jwt.config.ts
-│   │   ├── mail.config.ts
-│   │   ├── payment.config.ts
-│   │   └── validation.schema.ts  # Joi schema enforcing env variable types and requirements
-│   │
-│   └── database/                 # 🗄️ Database DataSource, Migrations & Seeds
-│       ├── database.module.ts    # TypeOrmModule config with auto-migrations on boot
-│       ├── data-source.ts        # Standalone TypeORM DataSource CLI configuration
-│       ├── migrations/
-│       │   ├── 1786079461230-InitialAuthSchema.ts  # Schema migration for auth tables
-│       │   └── 1789834302660-CreateCatalogSchema.ts # Schema migration for 14 catalog tables
-│       └── seeds/
-│           ├── database-seeder.service.ts # Bootstrap seeder runner (runs on app startup)
-│           ├── seeder.interface.ts
-│           ├── role.seed.ts      # Roles: SUPER_ADMIN, ADMIN, USER
-│           ├── language.seed.ts  # Languages: English (en), Japanese (ja), French (fr), German (de)
-│           ├── category.seed.ts  # Categories: Manga, Manhwa, Manhua, Novel, Light Novel
-│           ├── genre.seed.ts     # Genres: Action, Adventure, Comedy, Drama, Fantasy, Romance, etc.
-│           ├── tag.seed.ts       # Tags: School, Magic, Revenge, Time Travel, Pirates, Supernatural
-│           ├── seed.ts           # Standalone CLI seeder entrypoint (pnpm seed)
-│           └── index.ts
+├─ src/
+│  ├─ app.module.ts
+│  ├─ app.controller.ts
+│  ├─ main.ts
+│  ├─ auth/
+│  ├─ catalog/
+│  ├─ common/
+│  ├─ config/
+│  ├─ database/
+│  ├─ payment/
+│  ├─ reading/
+│  ├─ storage/
+│  ├─ user/
+│  └─ wallet/
+├─ test/
+├─ .env.development
+├─ eslint.config.mjs
+├─ nest-cli.json
+├─ package.json
+├─ pnpm-lock.yaml
+├─ tsconfig.json
+├─ tsconfig.build.json
+├─ README.md
+└─ pnpm-workspace.yaml
 ```
 
----
+## Prerequisites
 
-## 🔐 Deep-Dive Security & Authentication Engine
+Before running the project, make sure you have:
 
-### Dual-Token Rotation Lifecycle
+- Node.js 20+
+- pnpm
+- PostgreSQL 14+
+- Access to AWS S3 credentials for media upload flows
+- Optional: PayPal sandbox credentials and Discord bot configuration for payment flows
 
-Traditional authentication systems suffer from an inherent security trade-off:
+## Environment Configuration
 
-1. **Long-Lived Stateless Tokens**: If intercepted, the attacker maintains access until expiration, with no server-side revocation mechanism.
-2. **Short-Lived Tokens Only**: Forces users to frequently re-enter credentials, degrading UX.
+The project uses environment files for local and runtime config.
 
-Kuroyomi resolves this by pairing **stateless, short-lived Access Tokens** with **stateful, single-use, rotating Refresh Tokens**:
+Use the existing `.env.development` file as a starting point, then fill in your own secure values.
 
-```mermaid
-flowchart TD
-    subgraph Client Request
-        A[Client calls /api/auth/refresh] -->|Sends Refresh Token A| B[AuthService.refresh]
-    end
+Example environment variables:
 
     subgraph Security Checks
         B --> C{1. JWT Signature & Expiry Valid?}
@@ -975,129 +774,256 @@ NODE_ENV=development
 PORT=3000
 APP_NAME="Kuroyomi Secure Ebook API"
 
-# PostgreSQL Database Configuration
 DB_HOST=localhost
 DB_PORT=5432
 DB_USERNAME=postgres
-DB_PASSWORD=your_postgres_password
-DB_NAME=manga_ebook_dev
+DB_PASSWORD=your_db_password
+DB_NAME=manga_ebook_dev_new
 
-# JWT Security (Must be at least 32 characters each)
-JWT_SECRET=super_secret_access_key_min_32_characters_long_12345
+JWT_SECRET=your_access_token_secret
 JWT_EXPIRES_IN=15m
-JWT_REFRESH_SECRET=super_secret_refresh_key_min_32_characters_long_12345
+JWT_REFRESH_SECRET=your_refresh_token_secret
 JWT_REFRESH_EXPIRES_IN=30d
 
-# SMTP Mail Delivery (Optional for local test, required for OTP delivery)
 MAIL_HOST=smtp.gmail.com
 MAIL_PORT=587
 MAIL_SECURE=false
-MAIL_USERNAME=your-email@gmail.com
-MAIL_PASSWORD=your-16-digit-gmail-app-password
-MAIL_FROM="Kuroyomi Ebook <your-email@gmail.com>"
+MAIL_USERNAME=your_email
+MAIL_PASSWORD=your_email_password
+MAIL_FROM="Your App <noreply@example.com>"
 
-# Payment Gateways (Optional for Phase 1 & 2)
-RAZORPAY_KEY=
-RAZORPAY_SECRET=
-
-# AWS S3 Storage (Direct Browser Presigned Uploads & Secure Streaming)
-AWS_ACCESS_KEY_ID=your_aws_access_key_id
-AWS_SECRET_ACCESS_KEY=your_aws_secret_access_key
+AWS_ACCESS_KEY_ID=your_aws_key
+AWS_SECRET_ACCESS_KEY=your_aws_secret
 AWS_REGION=ap-south-1
-AWS_S3_BUCKET=ebook-platform-pdfs-prod
+AWS_S3_BUCKET=your-bucket-name
 MAX_CHAPTER_PDF_SIZE_MB=200
 MAX_CHAPTER_IMAGE_SIZE_MB=20
 MAX_BOOK_COVER_SIZE_MB=10
+
+PAYPAL_MODE=sandbox
+PAYPAL_CLIENT_ID=your_paypal_client_id
+PAYPAL_CLIENT_SECRET=your_paypal_secret
+PAYPAL_WEBHOOK_ID=your_webhook_id
+
+DISCORD_BOT_TOKEN=your_discord_bot_token
+DISCORD_CLIENT_ID=your_discord_client_id
+DISCORD_GUILD_ID=your_discord_guild_id
 ```
 
----
+Important:
 
-### Step 3: Database Provisioning
+- Never commit real secrets to git
+- Use different credentials for development, staging, and production
+- Store production values in a secure secret manager or deployment environment
 
-Create the PostgreSQL database if it does not already exist:
+## Installation
+
+From the project root:
 
 ```bash
-# Using PostgreSQL CLI
-psql -U postgres -c "CREATE DATABASE manga_ebook_dev;"
+pnpm install
 ```
 
-_Or with Docker:_
+## Database Setup
+
+This project uses TypeORM with PostgreSQL.
+
+Create a database for local development:
+
+```sql
+CREATE DATABASE manga_ebook_dev_new;
+```
+
+Then run migrations:
 
 ```bash
-docker run --name kuroyomi-postgres -e POSTGRES_PASSWORD=root -e POSTGRES_DB=manga_ebook_dev -p 5432:5432 -d postgres:16-alpine
+pnpm run migration:run
 ```
 
----
-
-### Step 4: Executing Migrations & Seeds
-
-You can apply migrations and seed the initial roles (`SUPER_ADMIN`, `ADMIN`, `USER`) manually:
+If seed data is required for roles, categories, genres, tags, and coin packages:
 
 ```bash
-# Run migrations
-pnpm migration:run
-
-# Seed default roles
-pnpm seed
+pnpm run seed
 ```
 
-_(Alternatively, starting the dev server automatically executes pending migrations and seeders)._
+## Running the API
 
----
-
-### Step 5: Launching the Application
-
-Start the development server with live reload:
+Development mode:
 
 ```bash
-pnpm start:dev
+pnpm run start:dev
 ```
 
-When started successfully, you will see:
+Production build:
+
+```bash
+pnpm run build
+pnpm run start:prod
+```
+
+By default the app runs on:
+
+- API: http://localhost:3000/api
+- Swagger docs: http://localhost:3000/docs
+
+## Swagger Documentation
+
+The API includes Swagger UI for interactive testing.
+
+Open:
 
 ```text
-[Nest] LOG [NestFactory] Starting Nest application...
-[Nest] LOG [DatabaseSeederService] 🌱 Checking baseline database seed data...
-[Nest] LOG [DatabaseSeederService] ✅ Baseline seed data check completed.
-🚀 Application is running on: http://localhost:3000/api
-📖 Swagger documentation is available at: http://localhost:3000/docs
+http://localhost:3000/docs
 ```
 
-#### Running in Other Environments
+Swagger is configured with authentication support, tags, and detailed request/response metadata.
 
-| Environment          | Command                         | Loaded Environment File |
-| :------------------- | :------------------------------ | :---------------------- |
-| **Development**      | `pnpm start:dev`                | `.env.development`      |
-| **Staging**          | `pnpm start:staging`            | `.env.staging`          |
-| **Production Build** | `pnpm build && pnpm start:prod` | `.env.production`       |
-| **Debug Mode**       | `pnpm start:debug`              | `.env.development`      |
+## Authentication and Security Model
 
----
+This backend uses a secure authentication flow built around JWT and refresh tokens.
 
-### Step 6: Interactive Swagger API Explorer
+### Authentication flow
 
-Visit [`http://localhost:3000/docs`](http://localhost:3000/docs) in your browser to inspect the full interactive OpenAPI/Swagger documentation, view schemas, test live endpoints, and authorize Bearer tokens.
+1. User signs up with email and password
+2. Email verification OTP is sent
+3. User verifies email
+4. User logs in with credentials
+5. Server returns access token in response body and sets refresh token as an HTTP-only cookie
+6. Access token is used for authenticated API requests
+7. User refreshes token when access token expires
+8. Refresh token is rotated and invalidated after use
 
----
+### Security measures
 
-## 📡 Complete API Reference & Developer Cookbook
+- Passwords are hashed before storage
+- Email OTPs are time-based and validated
+- Refresh token rotation protects against replay abuse
+- HttpOnly refresh cookie reduces JavaScript access
+- JWT guard is globally applied to protected routes
+- Role guard restricts admin-only endpoints
+- Validation pipes sanitize and validate incoming requests
+- Security headers and compression are enabled
 
-> [!NOTE]
-> All endpoints are prefixed with `/api`. Protected endpoints require the header `Authorization: Bearer <accessToken>`.
+## Core API Endpoints
 
----
+The backend exposes these main routes under the /api prefix.
 
-### 6.1 Authentication & Security Endpoints
+### Authentication
 
-#### 1. User Registration
+```text
+POST /api/auth/register
+POST /api/auth/verify-email
+POST /api/auth/resend-verification-otp
+POST /api/auth/forgot-password
+POST /api/auth/reset-password
+POST /api/auth/login
+POST /api/auth/refresh
+POST /api/auth/logout
+POST /api/auth/logout-all
+```
 
-Creates a new user in the database with `isEmailVerified = false`, assigns the default `USER` role, generates a 6-digit OTP, and emails it to the user.
+### Catalog
 
-- **Endpoint**: `POST /api/auth/register`
-- **Access**: Public
-- **HTTP Status**: `201 Created`
+```text
+GET /api/series
+GET /api/series/:id
+POST /api/series
+PATCH /api/series/:id
+DELETE /api/series/:id
 
-#### cURL Request
+GET /api/volumes
+GET /api/volumes/:id
+POST /api/volumes
+PATCH /api/volumes/:id
+DELETE /api/volumes/:id
+
+GET /api/books
+GET /api/books/:id
+POST /api/books
+PATCH /api/books/:id
+DELETE /api/books/:id
+
+GET /api/chapters
+GET /api/chapters/:id
+POST /api/chapters
+PATCH /api/chapters/:id
+DELETE /api/chapters/:id
+```
+
+### User and Wallet
+
+```text
+GET /api/user/profile
+PATCH /api/user/profile
+POST /api/user/change-password
+GET /api/wallet
+GET /api/wallet/transactions
+GET /api/wallet/packages
+```
+
+### Payment and Order Flow
+
+```text
+POST /api/payment/create-order
+GET /api/payment/status/:id
+POST /api/payment/webhook/paypal
+GET /api/payment/return
+```
+
+These endpoints are used for coin purchases, checkout flows, and settlement confirmation.
+
+## Catalog Domain Model
+
+The platform supports digital publishing objects such as:
+
+- Series: a franchise or collection
+- Volumes: grouped edition containers inside a series
+- Books: publication items with metadata and pricing
+- Chapters: readable content units inside a book or volume
+- Genres, tags, authors, artists, languages, categories
+
+Each catalog entity supports visibility, ordering, and admin-controlled publication rules.
+
+## Storage and Media Handling
+
+The application integrates with AWS S3 for media files, including:
+
+- Book cover uploads
+- Chapter PDF uploads
+- Presigned URLs for secure download access
+- File validation for size and type
+- Metadata tracking for media assets
+
+This keeps the API flexible and reduces direct dependency on the application server for file serving.
+
+## Wallet and Payments
+
+The wallet module supports:
+
+- user coin balances
+- transaction history
+- active coin packages
+- PayPal checkout integration
+- Discord payment order flow
+- wallet settlement after successful payment
+
+The design supports a secure purchase flow without exposing sensitive payment logic directly to the frontend.
+
+## Reading Experience
+
+The reading layer handles:
+
+- user library management
+- reading progress tracking
+- chapter access validation
+- user-specific reading state
+- unlock logic for paid chapters
+
+This makes the platform suitable for subscription-free or pay-per-chapter ebook experiences.
+
+## Testing
+
+Run unit tests:
 
 ```bash
 curl -X POST http://localhost:3000/api/auth/register \
@@ -2048,61 +1974,37 @@ The email subsystem is powered by `Nodemailer` through `MailService` in `src/com
 ```bash
 # Run unit tests
 pnpm test
-
-# Run unit tests with watch mode
-pnpm test:watch
-
-# Generate unit test coverage report
-pnpm test:cov
-
-# Run end-to-end (E2E) integration tests
-pnpm test:e2e
-
-# Run ESLint validation and auto-fixes
-pnpm lint
-
-# Format codebase with Prettier
-pnpm format
 ```
 
----
+Run end-to-end tests:
 
-## 🗺️ Master Project Roadmap & Milestone Tracker (Phases 1–12)
+```bash
+pnpm run test:e2e
+```
 
-| Phase        | Milestone / Domain Area          |       Status       | Key Deliverables                                                                                                                                                          |
-| :----------- | :------------------------------- | :----------------: | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Phase 1**  | **Foundation & Architecture**    |    ✅ **DONE**     | NestJS 11, PostgreSQL, TypeORM, env configurations, Joi schema validation, migrations & idempotent seeders.                                                               |
-| **Phase 2**  | **Authentication & Security**    |    ✅ **DONE**     | Dual-token auth (JWT + rotation), bcrypt OTP verification, password reset, RBAC guards, device detection, Swagger docs.                                                   |
-| **Phase 3**  | **User Management Module**       | ⏳ **IN PROGRESS** | User profiles, account settings, theme preferences, avatar uploads, reading activity logs.                                                                                |
-| **Phase 4**  | **Catalog & Content Engine**     |    ✅ **DONE**     | 14 TypeORM entities, isolated PostgreSQL "catalog" schema, dual hierarchy (Series→Volume→Book & Series→Book), composite indexes, and idempotent master reference seeders. |
-| **Phase 5**  | **Reading & Library Engine**     |    📋 _Planned_    | Page delivery API, cloud reading progress sync, bookmarks, favorites, and reading analytics.                                                                              |
-| **Phase 6**  | **Wallet & Virtual Coins**       |    📋 _Planned_    | Coin wallet balance, pay-per-chapter unlocking, transaction ledger, daily login reward coins.                                                                             |
-| **Phase 7**  | **Payment Gateway Integration**  |    📋 _Planned_    | Razorpay / Stripe integration, coin bundles, webhooks, invoice generation & purchase history.                                                                             |
-| **Phase 8**  | **Admin CMS & Moderation**       |    📋 _Planned_    | Admin dashboard APIs, batch chapter upload pipeline, user bans, role management & sales analytics.                                                                        |
-| **Phase 9**  | **Cloud Storage & CDN Delivery** |    📋 _Planned_    | AWS S3 / Cloudflare R2 storage, signed image URLs, WebP conversion pipeline, CDN caching.                                                                                 |
-| **Phase 10** | **Production Hardening**         |    📋 _Planned_    | Redis caching layer, distributed rate limiting, health probes (`@nestjs/terminus`), APM logging.                                                                          |
-| **Phase 11** | **Automated Testing Suite**      |    📋 _Planned_    | Comprehensive unit tests, E2E flow tests, database fixtures, load testing with k6.                                                                                        |
-| **Phase 12** | **CI/CD & Deployment**           |    📋 _Planned_    | GitHub Actions pipeline, multi-stage Dockerfile, staging and zero-downtime production deployment.                                                                         |
+Run coverage:
 
----
+```bash
+pnpm run test:cov
+```
 
-## 📦 Tech Stack Matrix
+## Production Notes
 
-| Category              | Technology                                                                                | Version              | Purpose                                      |
-| :-------------------- | :---------------------------------------------------------------------------------------- | :------------------- | :------------------------------------------- |
-| **Framework**         | [NestJS](https://nestjs.com/)                                                             | `^11.0.1`            | Modular backend architecture                 |
-| **Language**          | [TypeScript](https://www.typescriptlang.org/)                                             | `^5.7.3`             | Type-safe enterprise JavaScript              |
-| **Database**          | [PostgreSQL](https://www.postgresql.org/)                                                 | `14+`                | Relational ACID database                     |
-| **ORM**               | [TypeORM](https://typeorm.io/)                                                            | `^1.1.0`             | Schema migrations, entities, repositories    |
-| **Authentication**    | [Passport JWT](http://www.passportjs.org/)                                                | `^0.7.0`             | Stateless JWT and Bearer strategy            |
-| **Password Hashing**  | [bcrypt](https://www.npmjs.com/package/bcrypt)                                            | `^6.0.0`             | Password and OTP hashing                     |
-| **Validation**        | [class-validator](https://github.com/typestack/class-validator) & [Joi](https://joi.dev/) | `^0.15.1` / `18.2.3` | Request payload and environment sanitization |
-| **Email Service**     | [Nodemailer](https://nodemailer.com/)                                                     | `^9.0.4`             | SMTP transactional email delivery            |
-| **API Documentation** | [Swagger / OpenAPI](https://swagger.io/)                                                  | `^11.4.6`            | Interactive API documentation (`/docs`)      |
-| **Package Manager**   | [pnpm](https://pnpm.io/)                                                                  | `^9.x`               | Fast, disk-efficient package management      |
+Before deploying to production:
 
----
+- Set strong environment variables and rotate secrets
+- Run database migrations in the target environment
+- Configure HTTPS and secure cookies
+- Restrict CORS to trusted origins
+- Keep AWS credentials in a secret manager
+- Monitor JWT expiration and refresh behavior
+- Validate chapter upload size limits and file types
+- Review PayPal webhook security and signature verification
 
-## 📄 License
+## License
 
-This project is licensed under the **UNLICENSED** / Proprietary license. All rights reserved.
+This project is currently configured as private and unlicensed in package metadata.
+
+## Summary
+
+Secure Ebook API is a production-oriented backend for a digital publishing platform with secure account management, scalable catalog operations, payment support, and protected chapter delivery. It is structured for both rapid local development and real-world deployment needs.
