@@ -820,35 +820,20 @@ Chapter configuration and pricing overrides.
 | `chapter_number`  | `numeric(6, 2)` | `NOT NULL`                                  | Chapter number (supports 10.5)  |
 | `title`           | `varchar(255)`  | `NULLABLE`                                  | Optional chapter title          |
 | `sort_order`      | `integer`       | Default `0`                                 | Deterministic sequence order    |
-| `pricing_model`   | `enum`          | Default `FREE`                              | `FREE`, `PARTIAL_FREE`, `PAID`  |
-| `free_page_count` | `integer`       | Default `0`                                 | Free pages in PARTIAL_FREE mode |
+| `pricing_model`   | `enum`          | Default `FREE`                              | `FREE` or `PAID`                |
 | `coin_cost`       | `integer`       | Default `0`                                 | Required coin unlocking fee     |
-| `page_count`      | `integer`       | Default `0`                                 | Total page count                |
+| `pages`           | `jsonb`         | Default `[]`                                | Ordered WebP page metadata      |
+| `page_count`      | `integer`       | Default `0`                                 | Total image page count          |
+| `content_status`  | `enum`          | Default `PENDING`                           | `PENDING`, `READY`, or `FAILED` |
 | `published`       | `boolean`       | Default `false`                             | Publication visibility flag     |
 | `published_at`    | `timestamptz`   | `NULLABLE`                                  | Publication timestamp           |
 | `deleted_at`      | `timestamptz`   | `NULLABLE`                                  | Soft delete timestamp           |
 
 _Constraints_: `INDEX(book_id, sort_order)`, `INDEX(book_id, chapter_number)`.
 
-#### 10. Table: `catalog.pages`
+#### 10. Chapter page asset format
 
-Deterministic page assets, dimensions, and DRM storage references.
-
-| Column          | Data Type      | Constraints                                    | Description                            |
-| :-------------- | :------------- | :--------------------------------------------- | :------------------------------------- |
-| `id`            | `uuid`         | `PRIMARY KEY`, Default `uuid_generate_v4()`    | Unique page ID                         |
-| `chapter_id`    | `uuid`         | `FK -> catalog.chapters(id) ON DELETE CASCADE` | Parent chapter                         |
-| `page_number`   | `integer`      | `NOT NULL`                                     | Human-readable page number (1-indexed) |
-| `sort_order`    | `integer`      | Default `0`, Indexed                           | Reading canvas sequence order          |
-| `storage_key`   | `varchar(500)` | `NOT NULL`                                     | Private Cloudflare R2 / S3 object key  |
-| `encrypted_key` | `varchar(500)` | `NULLABLE`                                     | AES-256 DRM encryption key metadata    |
-| `width`         | `integer`      | `NULLABLE`                                     | Pixel image width                      |
-| `height`        | `integer`      | `NULLABLE`                                     | Pixel image height                     |
-| `mime_type`     | `varchar(50)`  | `NULLABLE`                                     | MIME type (e.g., image/webp)           |
-| `file_size`     | `integer`      | `NULLABLE`                                     | Raw file size in bytes                 |
-| `checksum`      | `varchar(64)`  | `NULLABLE`                                     | SHA-256 file integrity checksum        |
-
-_Constraints_: `UNIQUE(chapter_id, page_number)`, `INDEX(chapter_id, sort_order)`.
+The `catalog.chapters.pages` JSONB array stores ordered entries shaped like `{ "pageNumber": 1, "imageUrl": "<private storage key>", "storageKey": "<private storage key>", "width": 1200, "height": 2400 }`. Reader access returns short-lived signed URLs instead of exposing public S3 assets.
 
 #### 11. Table: `catalog.media_assets`
 
@@ -1021,6 +1006,7 @@ AWS_SECRET_ACCESS_KEY=your_aws_secret_access_key
 AWS_REGION=ap-south-1
 AWS_S3_BUCKET=ebook-platform-pdfs-prod
 MAX_CHAPTER_PDF_SIZE_MB=200
+MAX_CHAPTER_IMAGE_SIZE_MB=20
 MAX_BOOK_COVER_SIZE_MB=10
 ```
 
@@ -1992,9 +1978,20 @@ Validates the uploaded PDF in S3 (`HeadObject` and PDF magic bytes `%PDF`), veri
 
 ---
 
+#### WebP Multi-Page Chapter Upload
+
+Chapter pages are uploaded as separate WebP objects to avoid oversized stitched images. The reader obtains short-lived page URLs through the authorized chapter access endpoint.
+
+- **Upload URLs**: `POST /api/chapters/:id/pages/upload-urls` with `{ "pages": [{ "fileName": "01.webp", "fileSize": 420000, "contentType": "image/webp" }] }`
+- **Save order**: `PUT /api/chapters/:id/pages` with ordered page entries containing `pageNumber`, `storageKey`, and optional `width`/`height`
+- **Access**: Upload and save endpoints require `ADMIN` or `SUPER_ADMIN`; image uploads are limited by `MAX_CHAPTER_IMAGE_SIZE_MB` (default 20 MB per page).
+- The backend verifies each uploaded S3 object is a WebP before setting the chapter to `READY`.
+
+---
+
 #### 37. Get Authorized Chapter Reader Access URL
 
-Generates a short-lived, secure presigned AWS S3 download/streaming URL for the chapter PDF. Validates chapter unlock status, free pricing model, or user coin purchases before granting access.
+Generates short-lived, secure presigned AWS S3 URLs for ordered WebP pages (or a legacy PDF). Validates chapter unlock status, free pricing model, or user coin purchases before granting access.
 
 - **Endpoint**: `GET /api/chapters/:id/access`
 - **Access**: Authenticated (`JwtAuthGuard`)
@@ -2008,10 +2005,13 @@ Generates a short-lived, secure presigned AWS S3 download/streaming URL for the 
   "bookId": "e0000000-0000-0000-0000-000000000001",
   "title": "Romance Dawn — Dawn of the Adventure",
   "chapterNumber": 1.0,
-  "pageCount": 28,
+  "pageCount": 2,
   "isUnlocked": true,
-  "streamUrl": "https://ebook-platform-pdfs-prod.s3.ap-south-1.amazonaws.com/chapters/c0000000.../chapter.pdf?AWSAccessKeyId=...&Signature=...",
-  "expiresIn": 3600
+  "pages": [
+    { "pageNumber": 1, "imageUrl": "<short-lived signed WebP URL>", "width": 1200, "height": 2400 },
+    { "pageNumber": 2, "imageUrl": "<short-lived signed WebP URL>", "width": 1200, "height": 2400 }
+  ],
+  "expiresIn": 600
 }
 ```
 

@@ -13,6 +13,14 @@ import { ChapterContentStatus } from '../../common/enums/chapter-content-status.
 import { Book } from './book.entity';
 import { ChapterUnlock } from './chapter-unlock.entity';
 
+export interface ChapterPageAsset {
+  pageNumber: number;
+  imageUrl: string;
+  width?: number;
+  height?: number;
+  storageKey?: string;
+}
+
 @Entity({
   schema: 'catalog',
   name: 'chapters',
@@ -77,6 +85,19 @@ export class Chapter extends BaseEntity {
     default: 0,
   })
   coinCost: number;
+
+  @Column({
+    type: 'jsonb',
+    default: () => "'[]'::jsonb",
+  })
+  pages: ChapterPageAsset[];
+
+  @Column({
+    name: 'page_count',
+    type: 'integer',
+    default: 0,
+  })
+  pageCount: number;
 
   @Column({
     name: 'pdf_storage_key',

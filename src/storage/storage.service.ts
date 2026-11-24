@@ -23,6 +23,7 @@ export class StorageService implements OnModuleInit {
   private bucket: string;
   private region: string;
   private maxFileSizeMb: number;
+  private maxChapterImageSizeMb: number;
   private maxBookCoverSizeMb: number;
 
   constructor(private readonly configService: ConfigService) {}
@@ -42,6 +43,12 @@ export class StorageService implements OnModuleInit {
       this.configService.get<number>('aws.maxChapterPdfSizeMb') ||
         this.configService.get<number>('MAX_CHAPTER_PDF_SIZE_MB') ||
         200,
+    );
+
+    this.maxChapterImageSizeMb = Number(
+      this.configService.get<number>('aws.maxChapterImageSizeMb') ||
+        this.configService.get<number>('MAX_CHAPTER_IMAGE_SIZE_MB') ||
+        20,
     );
 
     this.maxBookCoverSizeMb = Number(
@@ -92,6 +99,14 @@ export class StorageService implements OnModuleInit {
 
   getMaxFileSizeMb(): number {
     return this.maxFileSizeMb;
+  }
+
+  getMaxChapterImageSizeBytes(): number {
+    return this.maxChapterImageSizeMb * 1024 * 1024;
+  }
+
+  getMaxChapterImageSizeMb(): number {
+    return this.maxChapterImageSizeMb;
   }
 
   getMaxBookCoverSizeBytes(): number {

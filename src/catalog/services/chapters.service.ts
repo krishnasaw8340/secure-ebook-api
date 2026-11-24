@@ -26,6 +26,9 @@ import {
   ChapterPdfUploadInitDto,
   ChapterPdfUploadInitResponseDto,
   ChapterPdfUploadCompleteDto,
+  ChapterPagesUploadUrlsDto,
+  ChapterPagesUploadUrlsResponseDto,
+  SaveChapterPagesDto,
   ChapterAccessResponseDto,
 } from '../dto';
 
@@ -613,9 +616,138 @@ export class ChaptersService {
     return this.chapterRepository.save(chapter);
   }
 
+  async generatePageUploadUrls(
+    chapterId: string,
+    dto: ChapterPagesUploadUrlsDto,
+  ): Promise<ChapterPagesUploadUrlsResponseDto> {
+    const chapter = await this.chapterRepository.findOne({
+      where: { id: chapterId },
+    });
+
+    if (!chapter) {
+      throw new NotFoundException(`Chapter with ID "${chapterId}" not found`);
+    }
+
+    const maxSizeBytes = this.storageService.getMaxChapterImageSizeBytes();
+    const pages = await Promise.all(
+      dto.pages.map(async (page, index) => {
+        if (page.fileSize > maxSizeBytes) {
+          throw new BadRequestException(
+            `Page "${page.fileName}" exceeds maximum allowed limit of ${this.storageService.getMaxChapterImageSizeMb()}MB`,
+          );
+        }
+
+        const storageKey = `chapters/${chapter.id}/pages/${randomUUID()}.webp`;
+        const uploadUrl = await this.storageService.generatePresignedUploadUrl({
+          key: storageKey,
+          contentType: 'image/webp',
+          expiresInSeconds: 600,
+        });
+
+        return {
+          pageNumber: index + 1,
+          storageKey,
+          uploadUrl,
+          expiresIn: 600,
+        };
+      }),
+    );
+
+    return { chapterId: chapter.id, pages };
+  }
+
+  async savePages(chapterId: string, dto: SaveChapterPagesDto): Promise<Chapter> {
+    const chapter = await this.chapterRepository.findOne({
+      where: { id: chapterId },
+    });
+
+    if (!chapter) {
+      throw new NotFoundException(`Chapter with ID "${chapterId}" not found`);
+    }
+
+    const maxSizeBytes = this.storageService.getMaxChapterImageSizeBytes();
+    const pages = await Promise.all(
+      dto.pages.map(async (page, index) => {
+        if (page.pageNumber !== index + 1) {
+          throw new BadRequestException(
+            'Page numbers must be ordered sequentially starting at 1',
+          );
+        }
+
+        const expectedPrefix = `chapters/${chapter.id}/pages/`;
+        if (
+          !page.storageKey.startsWith(expectedPrefix) ||
+          !page.storageKey.toLowerCase().endsWith('.webp')
+        ) {
+          throw new BadRequestException(
+            `Storage key "${page.storageKey}" is not a WebP page for this chapter`,
+          );
+        }
+
+        let object: HeadObjectCommandOutput;
+        try {
+          object = await this.storageService.headObject(page.storageKey);
+        } catch (error: unknown) {
+          const s3Error = error as {
+            name?: string;
+            $metadata?: { httpStatusCode?: number };
+          };
+          if (
+            s3Error.name === 'NotFound' ||
+            s3Error.name === 'NoSuchKey' ||
+            s3Error.$metadata?.httpStatusCode === 404
+          ) {
+            throw new NotFoundException(
+              `Uploaded page ${page.pageNumber} was not found in S3`,
+            );
+          }
+          throw error;
+        }
+        if (object.ContentType?.toLowerCase() !== 'image/webp') {
+          throw new BadRequestException(
+            `Page ${page.pageNumber} must be uploaded as image/webp`,
+          );
+        }
+
+        const signature = await this.storageService.getObjectHead(
+          page.storageKey,
+          12,
+        );
+        if (
+          signature.toString('ascii', 0, 4) !== 'RIFF' ||
+          signature.toString('ascii', 8, 12) !== 'WEBP'
+        ) {
+          throw new BadRequestException(
+            `Page ${page.pageNumber} does not contain valid WebP image data`,
+          );
+        }
+
+        const fileSize = object.ContentLength ?? 0;
+        if (fileSize <= 0 || fileSize > maxSizeBytes) {
+          throw new BadRequestException(
+            `Page ${page.pageNumber} has an invalid or oversized S3 object`,
+          );
+        }
+
+        return {
+          pageNumber: page.pageNumber,
+          imageUrl: page.storageKey,
+          storageKey: page.storageKey,
+          ...(page.width !== undefined ? { width: page.width } : {}),
+          ...(page.height !== undefined ? { height: page.height } : {}),
+        };
+      }),
+    );
+
+    chapter.pages = pages;
+    chapter.pageCount = pages.length;
+    chapter.contentStatus = ChapterContentStatus.READY;
+    return this.chapterRepository.save(chapter);
+  }
+
   /**
    * GET /chapters/:id/access (Authenticated Users)
-   * Retrieves an authorized short-lived presigned download URL for the Chapter PDF.
+   * Retrieves authorized short-lived download URLs for chapter content.
    */
   async getChapterAccess(
     id: string,
@@ -640,18 +772,46 @@ export class ChaptersService {
       throw new NotFoundException(`Chapter "${id}" not found`);
     }
 
-    // Verify Chapter has an active/ready PDF reference in DB
-    if (
-      !chapter.pdfStorageKey ||
-      chapter.contentStatus !== ChapterContentStatus.READY
-    ) {
-      throw new NotFoundException('Chapter PDF content is not available');
-    }
-
     // Paid chapters require an unlock (coins spent) unless the user is an admin.
     await this.chapterUnlockService.assertEntitled(chapter, user);
 
     const expiresInSeconds = 600; // 10 minutes
+    if (chapter.pages?.length && chapter.contentStatus === ChapterContentStatus.READY) {
+      const pages = await Promise.all(
+        [...chapter.pages]
+          .sort((a, b) => a.pageNumber - b.pageNumber)
+          .map(async (page) => {
+            const storageKey = page.storageKey || page.imageUrl;
+            return {
+              pageNumber: page.pageNumber,
+              imageUrl: await this.storageService.generatePresignedDownloadUrl(
+                storageKey,
+                expiresInSeconds,
+              ),
+              ...(page.width !== undefined ? { width: page.width } : {}),
+              ...(page.height !== undefined ? { height: page.height } : {}),
+            };
+          }),
+      );
+
+      return {
+        chapterId: chapter.id,
+        bookId: chapter.bookId,
+        chapterNumber: chapter.chapterNumber,
+        title: chapter.title,
+        pages,
+        pageCount: chapter.pageCount,
+        expiresIn: expiresInSeconds,
+      };
+    }
+
+    if (
+      !chapter.pdfStorageKey ||
+      chapter.contentStatus !== ChapterContentStatus.READY
+    ) {
+      throw new NotFoundException('Chapter content is not available');
+    }
+
     const pdfUrl = await this.storageService.generatePresignedDownloadUrl(
       chapter.pdfStorageKey,
       expiresInSeconds,

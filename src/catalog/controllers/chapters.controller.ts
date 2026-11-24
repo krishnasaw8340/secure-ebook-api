@@ -9,6 +9,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Put,
   Query,
   UnauthorizedException,
   UseGuards,
@@ -40,6 +41,9 @@ import {
   ChapterPdfUploadInitResponseDto,
   ChapterPdfUploadCompleteDto,
   ChapterAccessResponseDto,
+  ChapterPagesUploadUrlsDto,
+  ChapterPagesUploadUrlsResponseDto,
+  SaveChapterPagesDto,
 } from '../dto';
 
 @ApiTags('Chapters')
@@ -157,6 +161,42 @@ export class ChaptersController {
   })
   getChapterAccess(@Param('id') id: string, @CurrentUser() user?: JwtUser) {
     return this.chaptersService.getChapterAccess(id, user);
+  }
+
+  @Post(':id/pages/upload-urls')
+  @Roles(RoleType.ADMIN, RoleType.SUPER_ADMIN)
+  @UseGuards(RolesGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Generate presigned upload URLs for chapter WebP pages' })
+  @ApiParam({ name: 'id', description: 'Chapter UUID' })
+  @ApiResponse({
+    status: 200,
+    description: 'Batch of page upload URLs generated.',
+    type: ChapterPagesUploadUrlsResponseDto,
+  })
+  generatePageUploadUrls(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ChapterPagesUploadUrlsDto,
+  ) {
+    return this.chaptersService.generatePageUploadUrls(id, dto);
+  }
+
+  @Put(':id/pages')
+  @Roles(RoleType.ADMIN, RoleType.SUPER_ADMIN)
+  @UseGuards(RolesGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Save the ordered WebP pages for a chapter' })
+  @ApiParam({ name: 'id', description: 'Chapter UUID' })
+  @ApiResponse({
+    status: 200,
+    description: 'Uploaded chapter pages verified and saved.',
+    type: ChapterItemDto,
+  })
+  savePages(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: SaveChapterPagesDto,
+  ) {
+    return this.chaptersService.savePages(id, dto);
   }
 
   @Patch(':id')

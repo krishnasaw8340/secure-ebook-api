@@ -25,13 +25,25 @@ export class ChapterAccessResponseDto {
   })
   title?: string;
 
-  @ApiProperty({
+  @ApiPropertyOptional({
     description:
-      'Short-lived presigned GET URL for downloading the Chapter PDF',
+      'Short-lived presigned GET URL for legacy PDF chapters',
     example:
       'https://ebook-platform-pdfs-prod.s3.ap-south-1.amazonaws.com/chapters/.../chapter.pdf?...',
   })
-  pdfUrl: string;
+  pdfUrl?: string;
+
+  @ApiPropertyOptional({
+    description: 'Ordered chapter pages with temporary private S3 URLs',
+    type: 'array',
+    items: { type: 'object' },
+  })
+  pages?: Array<{
+    pageNumber: number;
+    imageUrl: string;
+    width?: number;
+    height?: number;
+  }>;
 
   @ApiProperty({
     description: 'Presigned URL expiration duration in seconds',

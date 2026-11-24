@@ -16,4 +16,5 @@ export * from './update-chapter.dto';
 export * from './query-chapter.dto';
 export * from './chapter-response.dto';
 export * from './chapter-pdf-upload.dto';
+export * from './chapter-pages.dto';
 export * from './chapter-access-response.dto';

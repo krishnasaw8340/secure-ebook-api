@@ -76,8 +76,13 @@ describe('ChaptersService', () => {
         ContentType: 'application/pdf',
         ContentLength: 15420000,
       }),
+      getObjectHead: jest.fn().mockResolvedValue(
+        Buffer.from([0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50]),
+      ),
       getMaxFileSizeBytes: jest.fn().mockReturnValue(200 * 1024 * 1024),
       getMaxFileSizeMb: jest.fn().mockReturnValue(200),
+      getMaxChapterImageSizeBytes: jest.fn().mockReturnValue(20 * 1024 * 1024),
+      getMaxChapterImageSizeMb: jest.fn().mockReturnValue(20),
       getBucketName: jest.fn().mockReturnValue('ebook-platform-pdfs-prod'),
     };
 
@@ -529,6 +534,110 @@ describe('ChaptersService', () => {
   });
 
   describe('getChapterAccess', () => {
+    it('should issue WebP upload URLs in the requested batch order', async () => {
+      chapterRepo.findOne.mockResolvedValue({ ...mockChapter });
+
+      const result = await service.generatePageUploadUrls(mockChapter.id!, {
+        pages: [
+          { fileName: '1.webp', fileSize: 1000, contentType: 'image/webp' },
+          { fileName: '2.webp', fileSize: 2000, contentType: 'image/webp' },
+        ],
+      });
+
+      expect(result.pages.map((page) => page.pageNumber)).toEqual([1, 2]);
+      expect(result.pages[0].storageKey).toMatch(
+        new RegExp(`^chapters/${mockChapter.id}/pages/.+\\.webp$`),
+      );
+      expect(storageService.generatePresignedUploadUrl).toHaveBeenCalledWith(
+        expect.objectContaining({ contentType: 'image/webp' }),
+      );
+    });
+
+    it('should verify and persist the ordered page keys', async () => {
+      const pageKey = `chapters/${mockChapter.id}/pages/page-1.webp`;
+      chapterRepo.findOne.mockResolvedValue({ ...mockChapter, pages: [] });
+      storageService.headObject.mockResolvedValue({
+        ContentType: 'image/webp',
+        ContentLength: 1000,
+      });
+      storageService.getObjectHead.mockResolvedValue(
+        Buffer.from([0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50]),
+      );
+
+      const result = await service.savePages(mockChapter.id!, {
+        pages: [
+          { pageNumber: 1, storageKey: pageKey, width: 800, height: 1200 },
+        ],
+      });
+
+      expect(result.pageCount).toBe(1);
+      expect(result.pages[0]).toMatchObject({
+        pageNumber: 1,
+        imageUrl: pageKey,
+        storageKey: pageKey,
+      });
+      expect(result.contentStatus).toBe(ChapterContentStatus.READY);
+    });
+
+    it('should reject a page key that belongs to another chapter', async () => {
+      chapterRepo.findOne.mockResolvedValue({ ...mockChapter });
+
+      await expect(
+        service.savePages(mockChapter.id!, {
+          pages: [
+            {
+              pageNumber: 1,
+              storageKey: 'chapters/other/pages/page.webp',
+            },
+          ],
+        }),
+      ).rejects.toThrow(BadRequestException);
+      expect(storageService.headObject).not.toHaveBeenCalled();
+    });
+
+    it('should reject WebP content types with non-WebP file signatures', async () => {
+      chapterRepo.findOne.mockResolvedValue({ ...mockChapter });
+      storageService.headObject.mockResolvedValue({
+        ContentType: 'image/webp',
+        ContentLength: 1000,
+      });
+      storageService.getObjectHead.mockResolvedValue(Buffer.from('not-webp'));
+
+      await expect(
+        service.savePages(mockChapter.id!, {
+          pages: [
+            {
+              pageNumber: 1,
+              storageKey: `chapters/${mockChapter.id}/pages/page.webp`,
+            },
+          ],
+        }),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should return ordered, temporary URLs for verified WebP chapter pages', async () => {
+      const pageKey = `chapters/${mockChapter.id}/pages/page-1.webp`;
+      chapterRepo.findOne.mockResolvedValue({
+        ...mockChapter,
+        pages: [{ pageNumber: 1, imageUrl: pageKey, storageKey: pageKey }],
+        pageCount: 1,
+      });
+
+      const result = await service.getChapterAccess(mockChapter.id!);
+
+      expect(storageService.generatePresignedDownloadUrl).toHaveBeenCalledWith(
+        pageKey,
+        600,
+      );
+      expect(result.pages).toEqual([
+        {
+          pageNumber: 1,
+          imageUrl: 'https://storage-mock.amazonaws.com/download',
+        },
+      ]);
+      expect(result.pageCount).toBe(1);
+    });
+
     it('should return short-lived presigned GET URL for DB-linked storage key', async () => {
       chapterRepo.findOne.mockResolvedValue({ ...mockChapter });
 
